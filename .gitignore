@@ -1,0 +1,8 @@
+*.so
+*.o
+*.d
+*.a
+lock_demo
+lock_server
+lock_tester
+rpc/rpctest
