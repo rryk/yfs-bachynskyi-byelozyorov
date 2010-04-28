@@ -561,7 +561,23 @@ void
 rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		char *b, int sz)
 {
+    // What is cb_present? "Completed before present"??????????????????????
+    std::list<reply_t>::iterator it;
+        std::list<reply_t> newList;
+        reply_t reply(xid);
+        reply.sz=sz;
+        reply.buf=b;
+        reply.cb_present=false;
 	ScopedLock rwl(&reply_window_m_);
+        if (reply_window_.find(clt_nonce)==reply_window_.end())
+            reply_window_[clt_nonce]=newList;
+        it=reply_window_[clt_nonce].begin();
+        while(it!=reply_window_[clt_nonce].end() && (*it).xid!=xid)
+            it++;
+        if (it==reply_window_[clt_nonce].end())
+            reply_window_[clt_nonce].push_front(reply);
+        else
+            (*it)=reply;
 }
 
 void
@@ -584,9 +600,51 @@ rpcs::rpcstate_t
 rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 		unsigned int xid_rep, char **b, int *sz)
 {
+        std::list<reply_t>::iterator it;
 	ScopedLock rwl(&reply_window_m_);
-
-	return NEW;
+        if (reply_window_.find(clt_nonce) == reply_window_.end())
+        {
+            std::list<reply_t> newList;
+            reply_window_[clt_nonce]=newList;
+            reply_t reply(xid);
+            reply.sz=0;
+            reply.buf=0;
+            reply.cb_present=true;
+            reply_window_[clt_nonce].push_front(reply);
+            return NEW;
+        }
+        else
+        {
+            it=reply_window_[clt_nonce].begin();
+            unsigned int maxId=0;
+            while(it!=reply_window_[clt_nonce].end() && (*it).xid!=xid)
+            {
+                maxId= (*it).xid>maxId ? (*it).xid: maxId;
+                it++;
+            }
+            if (it==reply_window_[clt_nonce].end())
+            {
+                if (xid<maxId)
+                    return FORGOTTEN;
+                reply_t reply(xid);
+                reply.sz=0;
+                reply.buf=0;
+                reply.cb_present=true;
+                reply_window_[clt_nonce].push_front(reply);
+                return NEW;
+            }
+            else
+            {
+                if ((*it).cb_present)
+                    return INPROGRESS;
+                else
+                {
+                    *b=(*it).buf;
+                    *sz=(*it).sz;
+                    return DONE;
+                }
+            }
+        }
 }
 
 //rpc handler
