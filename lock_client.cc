@@ -21,23 +21,33 @@ lock_client::lock_client(std::string dst)
 int
 lock_client::stat(lock_protocol::lockid_t lid)
 {
-  int r;
+  int r; // return value
+  
+  // start RPC request for stat()
   int ret = cl->call(lock_protocol::stat, cl->id(), lid, r);
+  
+  // there should be no problems
   assert (ret == lock_protocol::OK);
+  
+  // return returned value
   return r;
 }
 
 lock_protocol::status
 lock_client::acquire(lock_protocol::lockid_t lid)
 {
-    int r;
+    int r; // return value (not used)
+    
+    // start RPC request for acquire()
     return cl->call(lock_protocol::acquire, cl->id(), lid, r);
 }
 
 lock_protocol::status
 lock_client::release(lock_protocol::lockid_t lid)
 {
-    int r;
+    int r; // return value (not used)
+    
+    // start RPC request for release()
     return cl->call(lock_protocol::release, cl->id(), lid, r);
 }
 
