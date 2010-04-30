@@ -143,7 +143,7 @@ test5(void *x)
   return 0;
 }
 
-
+/*
 void *
 test6(void *x) 
 {
@@ -158,7 +158,7 @@ test6(void *x)
   }
   return 0;
 }
-
+*/
 
 int
 main(int argc, char *argv[])
@@ -252,7 +252,7 @@ main(int argc, char *argv[])
       }
     }
 
-
+/*
     if(!test || test == 6){
       // test6
       for (int i = 0; i < nt; i++) {
@@ -264,7 +264,7 @@ main(int argc, char *argv[])
 	pthread_join(th[i], NULL);
       }
     }
-
+*/
 
     printf ("%s: passed all tests successfully\n", argv[0]);
 
