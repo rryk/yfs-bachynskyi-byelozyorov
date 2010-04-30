@@ -569,7 +569,7 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
             assert(false);
             return;
         }
-        
+
         it=reply_window_[clt_nonce].begin();
         
         while(it!=reply_window_[clt_nonce].end() && (*it).xid!=xid)
@@ -580,10 +580,9 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
             assert(false);
             return;
         }
-        
+
         (*it).buf=b;
         (*it).sz=sz;
-        (*it).cb_present=false;
 }
 
 void
@@ -606,47 +605,64 @@ rpcs::rpcstate_t
 rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 		unsigned int xid_rep, char **b, int *sz)
 {
+        unsigned int windowSize=20;
         std::list<reply_t>::iterator it;
 	ScopedLock rwl(&reply_window_m_);
-        if (reply_window_.find(clt_nonce) == reply_window_.end())
+
+// If list of clt is empty, request is new
+        if (reply_window_[clt_nonce].size()<1)
         {
-            std::list<reply_t> newList;
-            reply_window_[clt_nonce]=newList;
             reply_t reply(xid);
-            reply.sz=0;
-            reply.buf=0;
-            reply.cb_present=true;
             reply_window_[clt_nonce].push_front(reply);
             return NEW;
         }
-        else
-        {
-            it=reply_window_[clt_nonce].begin();
-            while(it!=reply_window_[clt_nonce].end() && (*it).xid!=xid)
+
+// Find earliest XID
+        unsigned int earliestXid=reply_window_[clt_nonce].back().xid;
+        for (it=reply_window_[clt_nonce].begin(); it!=reply_window_[clt_nonce].end(); it++)
+            if ((*it).xid < earliestXid)
+                earliestXid=(*it).xid;
+
+// We received acknowledgement of reply reception XID_rep
+        it=reply_window_[clt_nonce].begin();
+        while (it!=reply_window_[clt_nonce].end() && (*it).xid!=xid_rep)
                 it++;
-            if (it==reply_window_[clt_nonce].end())
-            {
-                reply_t reply(xid);
-                reply.sz=0;
-                reply.buf=0;
-                reply.cb_present=true;
-                reply_window_[clt_nonce].push_front(reply);
-                return NEW;
-            }
-            else
-            {
-                if ((*it).cb_present)
-                {
-                    return INPROGRESS;
-                }
-                else
-                {
-                    *b=(*it).buf;
-                    *sz=(*it).sz;
-                    return DONE;
-                }
-            }
+        if (it!=reply_window_[clt_nonce].end())
+            (*it).cb_present = true;
+
+// Delete old values if window is too long
+        if (reply_window_[clt_nonce].size()>=windowSize)
+        {
+            delete[] reply_window_[clt_nonce].back().buf;
+            reply_window_[clt_nonce].pop_back();
         }
+
+// List is not empty. We check whether it contains reply with coresponding xid
+        it=reply_window_[clt_nonce].begin();
+        while(it!=reply_window_[clt_nonce].end() && (*it).xid!=xid)
+            it++;
+
+// In case it doesn't contain we check whether it is FORGOTTEN or NEW
+        if (it==reply_window_[clt_nonce].end())
+        {
+
+// If last reply's xid is greater than current xid, so current should be forgotten
+            if (earliestXid > xid)
+                return FORGOTTEN;
+
+            reply_t reply(xid);
+            reply_window_[clt_nonce].push_front(reply);
+            return NEW;
+        }
+
+// If list contains such xid, we already found it, now we check whether it is DONE or INPROGRESS
+        if ((*it).buf==NULL)
+            return INPROGRESS;
+
+// If buffer is not empty, than action is done
+        *b=(*it).buf;
+        *sz=(*it).sz;
+        return DONE;
 }
 
 //rpc handler
