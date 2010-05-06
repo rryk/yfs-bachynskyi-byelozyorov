@@ -1,9 +1,26 @@
+# compilation files
 *.so
 *.o
 *.d
 *.a
+
+# executables
 lock_demo
 lock_server
 lock_tester
 rpc/rpctest
-ds-project.*
+extent_server
+yfs_client
+
+# log files
+extent_server.log
+lock_server.log
+
+yfs_client1.log
+yfs_client2.log
+
+# QtCreator project files
+*.config
+*.creator
+*.files
+*.includes
