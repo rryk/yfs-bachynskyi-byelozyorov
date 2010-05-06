@@ -21,6 +21,9 @@
 int myid;
 yfs_client *yfs;
 
+// mapping from file names to inum identifiers
+std::map<std::string, yfs_client::inum> fileMap;
+
 int id() { 
   return myid;
 }
@@ -125,8 +128,18 @@ yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
      mode_t mode, struct fuse_entry_param *e)
 {
-  // You fill this in
-  return yfs_client::NOENT;
+    // TODO: check whether parent directory exists, otherwise
+    //       return yfs_client::NOENT
+
+    // TODO: generate new inum for the file
+
+    // TODO: store the content on the extent server
+
+    // TODO: set e.ino and e.attr
+
+    // TODO: return yfs_client::OK on success
+
+    return yfs_client::NOENT;
 }
 
 void
@@ -154,21 +167,35 @@ void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent,
 void
 fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-  struct fuse_entry_param e;
-  bool found = false;
+    struct fuse_entry_param e;
+    bool found = false;
 
-  e.attr_timeout = 0.0;
-  e.entry_timeout = 0.0;
+    // check if such name is in our mapping
+    if (fileMap.find(name) != fileMap.end())
+    {
+        yfs_client::inum file = fileMap[name];
 
-  // You fill this in:
-  // Look up the file named `name' in the directory referred to by
-  // `parent' in YFS. If the file was found, initialize e.ino and
-  // e.attr appropriately.
+        // TODO: check whether parent directory directory
+        //       exists
+        // TODO: get parent directory listing and
+        //       check whether file is listed
+        // TODO: update `found` var
 
-  if (found)
-    fuse_reply_entry(req, &e);
-  else
-    fuse_reply_err(req, ENOENT);
+        if (found)
+        {
+            // TODO: fill in e.ino and e.attr
+        }
+    }
+
+
+    // TODO: do we need this?
+    e.attr_timeout = 0.0;
+    e.entry_timeout = 0.0;
+
+    if (found)
+        fuse_reply_entry(req, &e);
+    else
+        fuse_reply_err(req, ENOENT);
 }
 
 
@@ -203,25 +230,25 @@ void
 fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
           off_t off, struct fuse_file_info *fi)
 {
-  yfs_client::inum inum = ino; // req->in.h.nodeid;
-  struct dirbuf b;
-  yfs_client::dirent e;
+    yfs_client::inum inum = ino; // req->in.h.nodeid;
+    struct dirbuf b;
+    yfs_client::dirent e;
 
-  printf("fuseserver_readdir\n");
+    printf("fuseserver_readdir\n");
 
- if(!yfs->isdir(inum)){
-    fuse_reply_err(req, ENOTDIR);
-    return;
-  }
+    if(!yfs->isdir(inum)){
+        fuse_reply_err(req, ENOTDIR);
+        return;
+    }
 
-  memset(&b, 0, sizeof(b));
+    memset(&b, 0, sizeof(b));
 
+    // TODO: read directory listing from the extent server
 
-   // fill in the b data structure using dirbuf_add
+    // TODO: fill in `b` data strucuture using dirbuf_add
 
-
-   reply_buf_limited(req, b.p, b.size, off, size);
-   free(b.p);
+    reply_buf_limited(req, b.p, b.size, off, size);
+    free(b.p);
  }
 
 
@@ -298,6 +325,8 @@ main(int argc, char *argv[])
   myid = random();
 
   yfs = new yfs_client(argv[2], argv[3]);
+
+  // TODO: create root directory with inum = 0x000000001
 
   fuseserver_oper.getattr    = fuseserver_getattr;
   fuseserver_oper.statfs     = fuseserver_statfs;
