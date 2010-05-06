@@ -24,3 +24,4 @@ yfs_client2.log
 *.creator
 *.files
 *.includes
+*.creator.user
