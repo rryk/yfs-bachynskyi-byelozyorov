@@ -91,5 +91,57 @@ yfs_client::getdir(inum inum, dirinfo &din)
   return r;
 }
 
+int
+yfs_client::getlisting(inum inum, std::vector<dirent> & entries)
+{
+    int r = OK;
+
+    const char * filenameStr;
+    const char * inumStr;
+
+    printf("getdir %016llx\n", inum);
+    extent_protocol::attr a;
+
+    std::string buf;
+    if (ec->get(inum, buf) != extent_protocol::OK)
+    {
+        r = IOERR;
+        goto release;
+    }
+
+    /* Dir structure format:
+     *   filename1:inum1:filename2:inum2:filename3:inum3...
+     */
+
+    // create mutable copy of the string as needed by strtok
+    char * dirContent;
+    strcpy(dirContent, buf.c_str());
+
+    filenameStr = strtok(dirContent, ":");
+
+    // read until there are more files
+    while (filenameStr != NULL)
+    {
+        // get inum for the file
+        inumStr = strtok(NULL, ":");
+
+        // check that inum for the file exists
+        assert(inumStr != NULL);
+
+        dirent e;
+        e.name = filenameStr;
+        e.inum = n2i(inumStr);
+
+        // add new entry
+        entries.push_back(e);
+
+        // get next file
+        filenameStr = strtok(NULL, ":");
+    }
+
+release:
+    return r;
+}
+
 
 

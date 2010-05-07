@@ -21,8 +21,7 @@
 int myid;
 yfs_client *yfs;
 
-// mapping from file names to inum identifiers
-std::map<std::string, yfs_client::inum> fileMap;
+std::map<fuse_ino_t,yfs_client::inum> inumMap;
 
 int id() { 
   return myid;
@@ -170,11 +169,33 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     struct fuse_entry_param e;
     bool found = false;
 
-    // check if such name is in our mapping
-    if (fileMap.find(name) != fileMap.end())
-    {
-        yfs_client::inum file = fileMap[name];
+    yfs_client::dirinfo dirInfo;
+    std::vector<yfs_client::dirent> dirEntries;
 
+    if (inumMap.find(parent) == inumMap.end())
+        fuse_reply_err(req, ENOENT);
+
+    yfs_client::inum parentInum = inumMap[parent];
+
+    // check whether parent exists
+    if (yfs->getdir(parentInum, dirInfo) != extent_protocol::OK)
+        fuse_reply_err(req, ENOENT);
+
+    // check whether parent is a dir
+    if (!yfs->isdir(parentInum))
+        fuse_reply_err(req, ENOTDIR);
+
+    // read listing for the dir
+    int res = yfs->getlisting(parentInum, dirEntries);
+
+    // this should be true, since we checked that dir exists
+    assert(res == extent_protocol::OK);
+
+    yfs->getlisting(parent, dirEntries);
+
+    for (std::vector<yfs_client::dirent>::const_iterator it =
+         dirEntries.begin(); it != dirEntries.end(); it++)
+    {
         // TODO: check whether parent directory directory
         //       exists
         // TODO: get parent directory listing and
