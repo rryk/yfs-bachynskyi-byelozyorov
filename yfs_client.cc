@@ -19,10 +19,10 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
     if (ec->getattr(0x00000001, attr) == extent_protocol::NOENT)
     {
         // create root dir
-        if (ec->put(0x00000001, "") != extent_protocol::NOENT)
+        if (ec->put(0x00000001, "") != extent_protocol::OK)
         {
             // crash on failure
-            printf("ERROR: Can't create root directory on the extent server. Peacefully crashing...");
+            printf("ERROR: Can't create root directory on the extent server. Peacefully crashing...\n");
             exit(0);
         }
     }
@@ -106,32 +106,26 @@ yfs_client::getdir(inum inum, dirinfo &din)
 int
 yfs_client::getlisting(inum inum, std::vector<dirent> & entries)
 {
-    int r = OK;
-
-    const char * filenameStr;
-    const char * inumStr;
-
     printf("getlisting %016llx\n", inum);
-    extent_protocol::attr a;
 
     // get directory content
     std::string buf;
     if (ec->get(inum, buf) != extent_protocol::OK)
-    {
-        r = IOERR;
-        goto release;
-    }
+        return IOERR;
 
     /* Dir structure format:
      *   filename1:inum1:filename2:inum2:filename3:inum3...
      */
 
     // create mutable copy of the string as needed by strtok
-    char * dirContent;
+    char * dirContent = new char[buf.length()];
     strcpy(dirContent, buf.c_str());
 
+    printf("getlisting %016llx -> dirContent = `%s`\n", inum, dirContent);
+
     // read until there are more files
-    filenameStr = strtok(dirContent, ":");
+    const char * filenameStr = strtok(dirContent, ":");
+    const char * inumStr;
     while (filenameStr != NULL)
     {
         // get inum for the file
@@ -151,25 +145,24 @@ yfs_client::getlisting(inum inum, std::vector<dirent> & entries)
         filenameStr = strtok(NULL, ":");
     }
 
-release:
-    return r;
+    // free memory
+    delete [] dirContent;
+
+    return OK;
 }
 
 int yfs_client::putfile(inum parentINum, const char * fileName, inum fileINum, std::string content)
 {
-    int r;
     std::string dirContent;
     printf("putfile %016llx in directory %016llx\n", fileINum, parentINum);
 
     // Add file with inum to server
-    r=ec->put(fileINum, content);
-    if (r!=extent_protocol::OK)
-        goto release;
+    if (ec->put(fileINum, content) != extent_protocol::OK)
+        return IOERR;
 
     // Get directory content from server
-    r=ec->get(parentINum, dirContent);
-    if (r!=extent_protocol::OK)
-        goto release;
+    if (ec->get(parentINum, dirContent) != extent_protocol::OK)
+        return NOENT;
 
     // Append information about file to directory information
     if (! dirContent.empty())
@@ -177,8 +170,8 @@ int yfs_client::putfile(inum parentINum, const char * fileName, inum fileINum, s
     dirContent.append(fileName).append(":").append(filename(fileINum));
 
     // Add changed directory content to server
-    r=ec->put(parentINum, dirContent);
+    if (ec->put(parentINum, dirContent) != extent_protocol::OK)
+        return IOERR;
 
-    release:
-     return r;
+    return OK;
 }

@@ -125,19 +125,23 @@ yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
      mode_t mode, struct fuse_entry_param *e)
 {
+    printf("fuseserver_createhelper(parent=%ld,name=%s,mode=%d,e=?)\n",parent,name,mode);
+
     yfs_client::status r;
     bool createFile=true;
 
     // Generation of 32 bits inum
     yfs_client::inum fileINum=0;
-    fileINum= (rand() << 16) || rand();
+    fileINum = random();
     if (createFile)
-        fileINum = fileINum || 1;
+        fileINum = fileINum | 0x8000000;
     else
-        fileINum=fileINum && 0xFFFFFFFFFFFFFFFE;
+        fileINum = fileINum & 0x7fffffff;
+
+    printf("fuseserver_createhelper(), generated id: %lld\n", fileINum);
 
     // Storing file to server
-    std::string content;
+    std::string content = "";
     r=yfs->putfile(parent,name,fileINum,content);
     if (r!=yfs_client::OK)
         return yfs_client::NOENT;
@@ -147,7 +151,8 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
     r=yfs->getfile(fileINum,fileInfo);
     if (r!=yfs_client::OK)
         return yfs_client::IOERR;
-    e->ino=fileINum;
+
+    e->ino = fileINum;
     e->attr.st_atim.tv_sec=fileInfo.atime;
     e->attr.st_atim.tv_nsec=fileInfo.atime * 1000;
     e->attr.st_ctim.tv_sec=fileInfo.ctime;
@@ -155,6 +160,9 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
     e->attr.st_mtim.tv_sec=fileInfo.mtime;
     e->attr.st_mtim.tv_nsec=fileInfo.mtime * 1000;
     e->attr.st_size=fileInfo.size;
+
+    printf("fuseserver_createhelper(), e->attr.st_size=%ld\n", e->attr.st_size);
+
     return yfs_client::OK;
 }
 
@@ -183,6 +191,8 @@ void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent,
 void
 fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+    printf("fuseserver_lookup(req=?,parent=%ld,name=%s)\n",parent,name);
+
     struct fuse_entry_param e;
     bool found = false;
 
@@ -193,19 +203,23 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 
     // check whether parent exists
     if (yfs->getdir(parentInum, dirInfo) != extent_protocol::OK)
+    {
         fuse_reply_err(req, ENOENT);
+        return;
+    }
 
     // check whether parent is a dir
     if (!yfs->isdir(parentInum))
+    {
         fuse_reply_err(req, ENOTDIR);
+        return;
+    }
 
     // read listing for the dir
     int res = yfs->getlisting(parentInum, dirEntries);
 
     // this should be true, since we checked that dir exists
     assert(res == extent_protocol::OK);
-
-    yfs->getlisting(parent, dirEntries);
 
     for (std::vector<yfs_client::dirent>::const_iterator it =
          dirEntries.begin(); it != dirEntries.end(); it++)
@@ -277,6 +291,8 @@ void
 fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
           off_t off, struct fuse_file_info *fi)
 {
+    printf("fuseserver_readdir(req=?,ino=%ld,size=%ld,off=%ld,fi=?)\n",ino,size,off);
+
     yfs_client::inum inum = ino; // req->in.h.nodeid;
     struct dirbuf b;
     yfs_client::dirent e;

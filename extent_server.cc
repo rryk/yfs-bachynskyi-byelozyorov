@@ -35,7 +35,7 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
     printf("extent_server::get(id=%lld)\n", id);
 
     // check if element exists
-    if (m_dataBlocks.find(id) != m_dataBlocks.end())
+    if (m_dataBlocks.find(id) == m_dataBlocks.end())
         return extent_protocol::NOENT;
 
     // get data from the extent map
@@ -57,7 +57,7 @@ int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr
     printf("extent_server::getattr(id=%lld)\n", id);
 
     // check if element exists
-    if (m_dataBlocks.find(id) != m_dataBlocks.end())
+    if (m_dataBlocks.find(id) == m_dataBlocks.end())
         return extent_protocol::NOENT;
 
     // get attributes from the extent map
