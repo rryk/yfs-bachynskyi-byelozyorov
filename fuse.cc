@@ -202,7 +202,6 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     printf("fuseserver_lookup(req=?,parent=%ld,name=%s)\n",parent,name);
 
     struct fuse_entry_param e;
-    bool found = false;
     e.ino = 0;
 
     yfs_client::dirinfo dirInfo;
@@ -235,9 +234,6 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     {
         if (it->name.compare(name) == 0)
         {
-            // set `found` flag
-            found = true;
-
             // convert identifier for FUSE (ignore higher 32 bits)
             e.ino = static_cast<fuse_ino_t>(it->inum);
 
@@ -253,24 +249,23 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
             e.attr.st_mtim.tv_nsec = fi.mtime * 1000;
             e.attr.st_ctim.tv_nsec = fi.ctime * 1000;
             e.attr.st_size = fi.size;
-            e.generation=generations[e.ino];
+            e.generation = generations[e.ino];
 
             // some extra attributes
             e.attr.st_ino = e.ino;
             e.attr.st_mode = 0777;
 
-            break;
+            // disable system caching for attributes
+            e.attr_timeout = 0.0;
+            e.entry_timeout = 0.0;
+
+            fuse_reply_entry(req, &e);
+
+            return;
         }
     }
 
-    // disable system caching for attributes
-    e.attr_timeout = 0.0;
-    e.entry_timeout = 0.0;
-
-    if (found)
-        fuse_reply_entry(req, &e);
-    else
-        fuse_reply_err(req, ENOENT);
+    fuse_reply_err(req, ENOENT);
 }
 
 
