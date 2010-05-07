@@ -166,8 +166,6 @@ int yfs_client::putfile(inum parentINum, const char * fileName, inum fileINum, s
 
     // Add changed directory content to server
     r=ec->put(parentINum, dirContent);
-    if (r!=extent_protocol::OK)
-        goto release;
 
     release:
      return r;
