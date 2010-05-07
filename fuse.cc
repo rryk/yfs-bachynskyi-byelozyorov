@@ -203,6 +203,7 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 
     struct fuse_entry_param e;
     bool found = false;
+    e.ino = 0;
 
     yfs_client::dirinfo dirInfo;
     std::vector<yfs_client::dirent> dirEntries;
@@ -253,6 +254,10 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
             e.attr.st_ctim.tv_nsec = fi.ctime * 1000;
             e.attr.st_size = fi.size;
             e.generation=generations[e.ino];
+
+            // some extra attributes
+            e.attr.st_ino = e.ino;
+            e.attr.st_mode = 0777;
 
             break;
         }
