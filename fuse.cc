@@ -154,12 +154,16 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
 
     e->ino = fileINum;
     e->attr.st_atim.tv_sec=fileInfo.atime;
-    e->attr.st_atim.tv_nsec=fileInfo.atime * 1000;
     e->attr.st_ctim.tv_sec=fileInfo.ctime;
-    e->attr.st_ctim.tv_nsec=fileInfo.ctime * 1000;
     e->attr.st_mtim.tv_sec=fileInfo.mtime;
+    e->attr.st_atim.tv_nsec=fileInfo.atime * 1000;
+    e->attr.st_ctim.tv_nsec=fileInfo.ctime * 1000;
     e->attr.st_mtim.tv_nsec=fileInfo.mtime * 1000;
-    e->attr.st_size=fileInfo.size;
+    e->attr.st_size = fileInfo.size;
+
+    // disable system caching for attributes
+    e->attr_timeout = 0.0;
+    e->entry_timeout = 0.0;
 
     printf("fuseserver_createhelper(), e->attr.st_size=%ld\n", e->attr.st_size);
 
@@ -316,7 +320,6 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     {
         dirbuf_add(&b, it->name.c_str(), static_cast<fuse_ino_t>(it->inum));
     }
-
 
     reply_buf_limited(req, b.p, b.size, off, size);
     free(b.p);
