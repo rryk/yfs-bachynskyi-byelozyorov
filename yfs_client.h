@@ -46,6 +46,7 @@
   int getdir(inum, dirinfo &);
 
   int getlisting(inum, std::vector<dirent> &);
+  int putfile(inum parentINum, const char * fileName, inum fileINum, std::string content);
 };
 
 #endif 

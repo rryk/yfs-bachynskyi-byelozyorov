@@ -143,5 +143,32 @@ release:
     return r;
 }
 
+int yfs_client::putfile(inum parentINum, const char * fileName, inum fileINum, std::string content)
+{
+    int r=OK;
+    std::string dirContent;
+    printf("putfile %016llx in directory %016llx\n", fileINum, parentINum);
 
+    // Add file with inum to server
+    r=ec->put(fileINum, content);
+    if (r!=OK)
+        goto release;
 
+    // Get directory content from server
+    r=ec->get(parentINum, dirContent);
+    if (r!=OK)
+        goto release;
+
+    // Append information about file to directory information
+    if (! dirContent.empty())
+        dirContent.append(":");
+    dirContent.append(fileName).append(":").append(filename(fileINum));
+
+    // Add changed directory content to server
+    r=ec->put(parentINum, dirContent);
+    if (r!=OK)
+        goto release;
+
+    release:
+     return r;
+}
