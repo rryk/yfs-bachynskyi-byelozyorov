@@ -125,18 +125,37 @@ yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
      mode_t mode, struct fuse_entry_param *e)
 {
-    // TODO: check whether parent directory exists, otherwise
-    //       return yfs_client::NOENT
+    yfs_client::status r;
+    bool createFile=true;
 
-    // TODO: generate new inum for the file
+    // Generation of 32 bits inum
+    yfs_client::inum fileINum=0;
+    fileINum= (rand() << 16) || rand();
+    if (createFile)
+        fileINum = fileINum || 1;
+    else
+        fileINum=fileINum && 0xFFFFFFFFFFFFFFFE;
 
-    // TODO: store the content on the extent server
+    // Storing file to server
+    std::string content;
+    r=yfs->putfile(parent,name,fileINum,content);
+    if (r!=yfs_client::OK)
+        return yfs_client::NOENT;
 
-    // TODO: set e.ino and e.attr
-
-    // TODO: return yfs_client::OK on success
-
-    return yfs_client::NOENT;
+    // Getting file information
+    yfs_client::fileinfo fileInfo;
+    r=yfs->getfile(fileINum,fileInfo);
+    if (r!=yfs_client::OK)
+        return yfs_client::IOERR;
+    e->ino=fileINum;
+    e->attr.st_atim.tv_sec=fileInfo.atime;
+    e->attr.st_atim.tv_nsec=fileInfo.atime * 1000;
+    e->attr.st_ctim.tv_sec=fileInfo.ctime;
+    e->attr.st_ctim.tv_nsec=fileInfo.ctime * 1000;
+    e->attr.st_mtim.tv_sec=fileInfo.mtime;
+    e->attr.st_mtim.tv_nsec=fileInfo.mtime * 1000;
+    e->attr.st_size=fileInfo.size;
+    return yfs_client::OK;
 }
 
 void
