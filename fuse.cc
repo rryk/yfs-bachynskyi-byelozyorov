@@ -21,6 +21,8 @@
 int myid;
 yfs_client *yfs;
 
+std::map<long long, int> generations;
+
 int id() { 
   return myid;
 }
@@ -131,8 +133,7 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
     bool createFile=true;
 
     // Generation of 32 bits inum
-    yfs_client::inum fileINum=0;
-    fileINum = random();
+    yfs_client::inum fileINum = random();
     if (createFile)
         fileINum = fileINum | 0x8000000;
     else
@@ -145,6 +146,7 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
     r=yfs->putfile(parent,name,fileINum,content);
     if (r!=yfs_client::OK)
         return yfs_client::NOENT;
+    generations[fileINum]=random();
 
     // Getting file information
     yfs_client::fileinfo fileInfo;
@@ -160,6 +162,8 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
     e->attr.st_ctim.tv_nsec=fileInfo.ctime * 1000;
     e->attr.st_mtim.tv_nsec=fileInfo.mtime * 1000;
     e->attr.st_size = fileInfo.size;
+    e->generation=generations[fileINum];
+
 
     // disable system caching for attributes
     e->attr_timeout = 0.0;
@@ -248,6 +252,7 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
             e.attr.st_mtim.tv_nsec = fi.mtime * 1000;
             e.attr.st_ctim.tv_nsec = fi.ctime * 1000;
             e.attr.st_size = fi.size;
+            e.generation=generations[e.ino];
 
             break;
         }
