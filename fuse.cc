@@ -271,9 +271,11 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
     memset(&b, 0, sizeof(b));
 
+    // get listing for the dir
     std::vector<yfs_client::dirent> dirEntries;
     yfs->getlisting(inum, dirEntries);
 
+    // walk over files and add information about them to the FUSE buffer
     for (std::vector<yfs_client::dirent>::const_iterator it =
          dirEntries.begin(); it != dirEntries.end(); it++)
     {
