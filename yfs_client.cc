@@ -12,8 +12,17 @@
 
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
-  ec = new extent_client(extent_dst);
+    ec = new extent_client(extent_dst);
 
+    extent_protocol::attr attr;
+    if (ec->getattr(0x00000001, attr) == extent_protocol::NOENT)
+    {
+        if (ec->put(0x00000001, "") != extent_protocol::NOENT)
+        {
+            printf("ERROR: Can't create root directory on the extent server. Peacefully crashing...");
+            exit(0);
+        }
+    }
 }
 
 yfs_client::inum

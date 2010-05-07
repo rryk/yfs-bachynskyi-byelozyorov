@@ -21,8 +21,6 @@
 int myid;
 yfs_client *yfs;
 
-std::map<fuse_ino_t,yfs_client::inum> inumMap;
-
 int id() { 
   return myid;
 }
@@ -172,10 +170,7 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     yfs_client::dirinfo dirInfo;
     std::vector<yfs_client::dirent> dirEntries;
 
-    if (inumMap.find(parent) == inumMap.end())
-        fuse_reply_err(req, ENOENT);
-
-    yfs_client::inum parentInum = inumMap[parent];
+    yfs_client::inum parentInum = parent;
 
     // check whether parent exists
     if (yfs->getdir(parentInum, dirInfo) != extent_protocol::OK)
@@ -212,13 +207,16 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
             e.attr.st_atim.tv_sec = fi.atime;
             e.attr.st_mtim.tv_sec = fi.mtime;
             e.attr.st_ctim.tv_sec = fi.ctime;
+            e.attr.st_atim.tv_nsec = fi.atime * 1000;
+            e.attr.st_mtim.tv_nsec = fi.mtime * 1000;
+            e.attr.st_ctim.tv_nsec = fi.ctime * 1000;
             e.attr.st_size = fi.size;
 
             break;
         }
     }
 
-    // TODO: do we need this?
+    // disable system caching for attributes
     e.attr_timeout = 0.0;
     e.entry_timeout = 0.0;
 
@@ -273,9 +271,15 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
     memset(&b, 0, sizeof(b));
 
-    // TODO: read directory listing from the extent server
+    std::vector<yfs_client::dirent> dirEntries;
+    yfs->getlisting(inum, dirEntries);
 
-    // TODO: fill in `b` data strucuture using dirbuf_add
+    for (std::vector<yfs_client::dirent>::const_iterator it =
+         dirEntries.begin(); it != dirEntries.end(); it++)
+    {
+        dirbuf_add(&b, it->name.c_str(), static_cast<fuse_ino_t>(it->inum));
+    }
+
 
     reply_buf_limited(req, b.p, b.size, off, size);
     free(b.p);
@@ -355,8 +359,6 @@ main(int argc, char *argv[])
   myid = random();
 
   yfs = new yfs_client(argv[2], argv[3]);
-
-  // TODO: create root directory with inum = 0x000000001
 
   fuseserver_oper.getattr    = fuseserver_getattr;
   fuseserver_oper.statfs     = fuseserver_statfs;
