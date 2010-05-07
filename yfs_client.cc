@@ -99,7 +99,7 @@ yfs_client::getlisting(inum inum, std::vector<dirent> & entries)
     const char * filenameStr;
     const char * inumStr;
 
-    printf("getdir %016llx\n", inum);
+    printf("getlisting %016llx\n", inum);
     extent_protocol::attr a;
 
     std::string buf;
@@ -145,18 +145,18 @@ release:
 
 int yfs_client::putfile(inum parentINum, const char * fileName, inum fileINum, std::string content)
 {
-    int r=OK;
+    int r;
     std::string dirContent;
     printf("putfile %016llx in directory %016llx\n", fileINum, parentINum);
 
     // Add file with inum to server
     r=ec->put(fileINum, content);
-    if (r!=OK)
+    if (r!=extent_protocol::OK)
         goto release;
 
     // Get directory content from server
     r=ec->get(parentINum, dirContent);
-    if (r!=OK)
+    if (r!=extent_protocol::OK)
         goto release;
 
     // Append information about file to directory information
@@ -166,7 +166,7 @@ int yfs_client::putfile(inum parentINum, const char * fileName, inum fileINum, s
 
     // Add changed directory content to server
     r=ec->put(parentINum, dirContent);
-    if (r!=OK)
+    if (r!=extent_protocol::OK)
         goto release;
 
     release:

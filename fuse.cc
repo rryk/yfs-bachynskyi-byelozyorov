@@ -196,18 +196,27 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     for (std::vector<yfs_client::dirent>::const_iterator it =
          dirEntries.begin(); it != dirEntries.end(); it++)
     {
-        // TODO: check whether parent directory directory
-        //       exists
-        // TODO: get parent directory listing and
-        //       check whether file is listed
-        // TODO: update `found` var
-
-        if (found)
+        if (it->name.compare(name) == 0)
         {
-            // TODO: fill in e.ino and e.attr
+            // set `found` flag
+            found = true;
+
+            // convert identifier for FUSE (ignore higher 32 bits)
+            e.ino = static_cast<fuse_ino_t>(it->inum);
+
+            // get file attributes
+            yfs_client::fileinfo fi;
+            yfs->getfile(e.ino, fi);
+
+            // copy attributes to FUSE structure
+            e.attr.st_atim.tv_sec = fi.atime;
+            e.attr.st_mtim.tv_sec = fi.mtime;
+            e.attr.st_ctim.tv_sec = fi.ctime;
+            e.attr.st_size = fi.size;
+
+            break;
         }
     }
-
 
     // TODO: do we need this?
     e.attr_timeout = 0.0;
