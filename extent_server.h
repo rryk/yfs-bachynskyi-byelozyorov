@@ -7,7 +7,14 @@
 #include <map>
 #include "extent_protocol.h"
 
+struct extent_t {
+    std::string data;
+    extent_protocol::attr attrs;
+};
+
 class extent_server {
+
+    std::map<extent_protocol::extentid_t, extent_t> m_dataBlocks; // data blocks
 
  public:
   extent_server();
