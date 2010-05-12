@@ -21,9 +21,7 @@
 int myid;
 yfs_client *yfs;
 
-std::map<long long, int> generations;
-
-int id() { 
+int id() {
   return myid;
 }
 
@@ -129,16 +127,16 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
 {
     printf("fuseserver_createhelper(parent=%ld,name=%s,mode=%d,e=?)\n",parent,name,mode);
 
+    // Creating 0 response
     yfs_client::status r;
-    bool createFile=true;
+    bzero(&(e->attr), sizeof(e->attr));
+    e->ino=0;
+    e->generation=0;
+    e->entry_timeout=0.0;
+    e->attr_timeout=0.0;
 
     // Generation of 32 bits inum
-    yfs_client::inum fileINum = random();
-    if (createFile)
-        fileINum = fileINum | 0x8000000;
-    else
-        fileINum = fileINum & 0x7fffffff;
-
+    yfs_client::inum fileINum = random() | 0x80000000;
     printf("fuseserver_createhelper(), generated id: %lld\n", fileINum);
 
     // Storing file to server
@@ -146,32 +144,23 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
     r=yfs->putfile(parent,name,fileINum,content);
     if (r!=yfs_client::OK)
         return yfs_client::NOENT;
-    generations[fileINum]=random();
 
     // Getting file information
-    yfs_client::fileinfo fileInfo;
-    r=yfs->getfile(fileINum,fileInfo);
+    yfs_client::fileinfo info;
+    r=yfs->getfile(fileINum,info);
     if (r!=yfs_client::OK)
         return yfs_client::IOERR;
 
-    e->ino = fileINum;
-    e->attr.st_atim.tv_sec=fileInfo.atime;
-    e->attr.st_ctim.tv_sec=fileInfo.ctime;
-    e->attr.st_mtim.tv_sec=fileInfo.mtime;
-    e->attr.st_atim.tv_nsec=fileInfo.atime * 1000;
-    e->attr.st_ctim.tv_nsec=fileInfo.ctime * 1000;
-    e->attr.st_mtim.tv_nsec=fileInfo.mtime * 1000;
-    e->attr.st_size = fileInfo.size;
-    e->generation=generations[fileINum];
+    e->ino=fileINum;
+    e->generation=1;
+    e->attr.st_mode = S_IFREG | 0666;
+    e->attr.st_nlink = 1;
+    e->attr.st_atime = info.atime;
+    e->attr.st_mtime = info.mtime;
+    e->attr.st_ctime = info.ctime;
+    e->attr.st_size = info.size;
 
-
-    // disable system caching for attributes
-    e->attr_timeout = 0.0;
-    e->entry_timeout = 0.0;
-
-    printf("fuseserver_createhelper(), e->attr.st_size=%ld\n", e->attr.st_size);
-
-    return yfs_client::OK;
+  return yfs_client::OK;
 }
 
 void
@@ -186,7 +175,7 @@ fuseserver_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   }
 }
 
-void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent, 
+void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent,
     const char *name, mode_t mode, dev_t rdev ) {
   struct fuse_entry_param e;
   if( fuseserver_createhelper( parent, name, mode, &e ) == yfs_client::OK ) {
@@ -199,73 +188,83 @@ void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent,
 void
 fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-    printf("fuseserver_lookup(req=?,parent=%ld,name=%s)\n",parent,name);
+  printf("fuseserver_lookup(req=?,parent=%ld,name=%s)\n",parent,name);
 
-    struct fuse_entry_param e;
-    e.ino = 0;
+  yfs_client::status r;
+  struct fuse_entry_param e;
+  bzero(&(e.attr), sizeof(e.attr));
+  e.ino=0;
+  e.generation=0;
+  e.entry_timeout=0.0;
+  e.attr_timeout=0.0;
 
-    yfs_client::dirinfo dirInfo;
-    std::vector<yfs_client::dirent> dirEntries;
+  yfs_client::dirinfo dirInfo;
+  std::vector<yfs_client::dirent> dirEntries;
 
-    yfs_client::inum parentInum = parent;
+  yfs_client::inum parentInum = parent;
 
-    // check whether parent exists
-    if (yfs->getdir(parentInum, dirInfo) != extent_protocol::OK)
-    {
-        fuse_reply_err(req, ENOENT);
-        return;
-    }
+  // check whether parent is a dir
+  if (!yfs->isdir(parentInum))
+  {
+      fuse_reply_err(req, ENOTDIR);
+      return;
+  }
 
-    // check whether parent is a dir
-    if (!yfs->isdir(parentInum))
-    {
-        fuse_reply_err(req, ENOTDIR);
-        return;
-    }
+  // check whether parent exists
+  if (yfs->getdir(parentInum, dirInfo) != extent_protocol::OK)
+  {
+      fuse_reply_err(req, ENOENT);
+      return;
+  }
 
-    // read listing for the dir
-    int res = yfs->getlisting(parentInum, dirEntries);
+  printf("Lookup Before Listing %u\n", dirEntries.capacity());
 
-    // this should be true, since we checked that dir exists
-    assert(res == extent_protocol::OK);
+  // read listing for the dir
+  int res = yfs->getlisting(parentInum, dirEntries);
+  printf("Lookup After Listing\n");
 
-    for (std::vector<yfs_client::dirent>::const_iterator it =
-         dirEntries.begin(); it != dirEntries.end(); it++)
-    {
-        if (it->name.compare(name) == 0)
-        {
-            // convert identifier for FUSE (ignore higher 32 bits)
-            e.ino = static_cast<fuse_ino_t>(it->inum);
+  // this should be true, since we checked that dir exists
+  assert(res == extent_protocol::OK);
 
-            // get file attributes
-            yfs_client::fileinfo fi;
-            yfs->getfile(e.ino, fi);
+  for (std::vector<yfs_client::dirent>::const_iterator it =
+       dirEntries.begin(); it != dirEntries.end(); it++)
+  {
+      if (it->name.compare(name) == 0)
+      {
+          // convert identifier for FUSE (ignore higher 32 bits)
+          e.ino = static_cast<fuse_ino_t>(it->inum);
+          e.generation=1;
 
-            // copy attributes to FUSE structure
-            e.attr.st_atim.tv_sec = fi.atime;
-            e.attr.st_mtim.tv_sec = fi.mtime;
-            e.attr.st_ctim.tv_sec = fi.ctime;
-            e.attr.st_atim.tv_nsec = fi.atime * 1000;
-            e.attr.st_mtim.tv_nsec = fi.mtime * 1000;
-            e.attr.st_ctim.tv_nsec = fi.ctime * 1000;
-            e.attr.st_size = fi.size;
-            e.generation = generations[e.ino];
+          if(yfs->isfile(it->inum)){
+             yfs_client::fileinfo info;
+             r = yfs->getfile(it->inum, info);
+             if(r != yfs_client::OK)
+                 fuse_reply_err(req, EIO);
+             e.attr.st_mode = S_IFREG | 0666;
+             e.attr.st_nlink = 1;
+             e.attr.st_atime = info.atime;
+             e.attr.st_mtime = info.mtime;
+             e.attr.st_ctime = info.ctime;
+             e.attr.st_size = info.size;
+           } else {
+             yfs_client::dirinfo info;
+             r = yfs->getdir(it->inum, info);
+             if(r != yfs_client::OK)
+               fuse_reply_err(req, EIO);
+             e.attr.st_mode = S_IFDIR | 0777;
+             e.attr.st_nlink = 2;
+             e.attr.st_atime = info.atime;
+             e.attr.st_mtime = info.mtime;
+             e.attr.st_ctime = info.ctime;
+           }
 
-            // some extra attributes
-            e.attr.st_ino = e.ino;
-            e.attr.st_mode = 0777;
+           fuse_reply_entry(req, &e);
 
-            // disable system caching for attributes
-            e.attr_timeout = 0.0;
-            e.entry_timeout = 0.0;
+           return;
+       }
+  }
 
-            fuse_reply_entry(req, &e);
-
-            return;
-        }
-    }
-
-    fuse_reply_err(req, ENOENT);
+  fuse_reply_err(req, ENOENT);
 }
 
 
@@ -309,15 +308,18 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     printf("fuseserver_readdir\n");
 
     if(!yfs->isdir(inum)){
-        fuse_reply_err(req, ENOTDIR);
-        return;
+    fuse_reply_err(req, ENOTDIR);
+    return;
     }
 
     memset(&b, 0, sizeof(b));
 
     // get listing for the dir
     std::vector<yfs_client::dirent> dirEntries;
+    printf("Readdir Before Listing\n");
+
     yfs->getlisting(inum, dirEntries);
+    printf("Readdir After Listing\n");
 
     // walk over files and add information about them to the FUSE buffer
     for (std::vector<yfs_client::dirent>::const_iterator it =
@@ -437,13 +439,13 @@ main(int argc, char *argv[])
 
   fuse_args args = FUSE_ARGS_INIT( fuse_argc, (char **) fuse_argv );
   int foreground;
-  int res = fuse_parse_cmdline( &args, &mountpoint, 0 /*multithreaded*/, 
+  int res = fuse_parse_cmdline( &args, &mountpoint, 0 /*multithreaded*/,
         &foreground );
   if( res == -1 ) {
     fprintf(stderr, "fuse_parse_cmdline failed\n");
     return 0;
   }
-  
+
   args.allocated = 0;
 
   fd = fuse_mount(mountpoint, &args);
@@ -470,7 +472,7 @@ main(int argc, char *argv[])
   fuse_session_add_chan(se, ch);
   // err = fuse_session_loop_mt(se);   // FK: wheelfs does this; why?
   err = fuse_session_loop(se);
-    
+
   fuse_session_destroy(se);
   close(fd);
   fuse_unmount(mountpoint);

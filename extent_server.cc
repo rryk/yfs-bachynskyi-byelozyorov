@@ -21,7 +21,9 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
     // create structure for new extent
     extent_t e;
     e.data = buf;
-    e.attrs.mtime = e.attrs.atime = e.attrs.ctime = time(NULL);
+    e.attrs.mtime =  time(NULL);
+    e.attrs.atime =  time(NULL);
+    e.attrs.ctime =  time(NULL);
     e.attrs.size = buf.length();
 
     // save structure to the extent map
@@ -46,7 +48,7 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
     time_t now = time(NULL);
     if (m_dataBlocks[id].attrs.atime < m_dataBlocks[id].attrs.ctime ||
         m_dataBlocks[id].attrs.atime < m_dataBlocks[id].attrs.mtime ||
-        m_dataBlocks[id].attrs.atime < now - 24*60)
+        m_dataBlocks[id].attrs.atime < now - 24*60*60)
         m_dataBlocks[id].attrs.atime = now;
 
     return extent_protocol::OK;
