@@ -138,6 +138,7 @@ yfs_client::getlisting(inum inum, std::vector<dirent> & entries)
         e.name = filenameStr;
         e.inum = n2i(inumStr);
 
+        printf("yfs_client::getlisting filename %s, inum %016llx \n",filenameStr, e.inum);
         // add new entry
         entries.push_back(e);
 
