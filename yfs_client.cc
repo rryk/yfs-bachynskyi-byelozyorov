@@ -118,7 +118,7 @@ yfs_client::getlisting(inum inum, std::vector<dirent> & entries)
      */
 
     // create mutable copy of the string as needed by strtok
-    char * dirContent = new char[buf.length()];
+    char dirContent[buf.length()];
     strcpy(dirContent, buf.c_str());
 
     printf("getlisting %016llx -> dirContent = `%s`\n", inum, dirContent);
@@ -138,16 +138,19 @@ yfs_client::getlisting(inum inum, std::vector<dirent> & entries)
         e.name = filenameStr;
         e.inum = n2i(inumStr);
 
-        printf("yfs_client::getlisting filename %s, inum %016llx \n",filenameStr, e.inum);
         // add new entry
         entries.push_back(e);
 
         // get next file
         filenameStr = strtok(NULL, ":");
+
     }
 
-    // free memory
-    delete [] dirContent;
+    for (std::vector<yfs_client::dirent>::const_iterator it =
+         entries.begin(); it != entries.end(); it++)
+    {
+        printf("Entry %s, %016llx",it->name.c_str(), it->inum);
+    }
 
     return OK;
 }

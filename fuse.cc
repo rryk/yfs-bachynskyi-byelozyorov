@@ -217,8 +217,11 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
       return;
   }
 
+  printf("Lookup Before Listing %u\n", dirEntries.capacity());
+
   // read listing for the dir
   int res = yfs->getlisting(parentInum, dirEntries);
+  printf("Lookup After Listing\n");
 
   // this should be true, since we checked that dir exists
   assert(res == extent_protocol::OK);
@@ -313,7 +316,10 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
     // get listing for the dir
     std::vector<yfs_client::dirent> dirEntries;
+    printf("Readdir Before Listing\n");
+
     yfs->getlisting(inum, dirEntries);
+    printf("Readdir After Listing\n");
 
     // walk over files and add information about them to the FUSE buffer
     for (std::vector<yfs_client::dirent>::const_iterator it =
