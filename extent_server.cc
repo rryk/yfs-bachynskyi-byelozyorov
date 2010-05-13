@@ -39,32 +39,42 @@ int extent_server::create(extent_protocol::extentid_t id, int &)
     return extent_protocol::OK;
 }
 
-int extent_server::update(extent_protocol::extentid_t id, std::string buf, unsigned offset, unsigned size, int &)
+int extent_server::update(extent_protocol::extentid_t id, std::string buf, unsigned offset, unsigned size, int & bytesWritten)
 {
-    printf("extent_server::update(id=%lld, buf=%s, offset=%d, size=%d)\n", id, buf.c_str(), offset, size);
+    printf("extent_server::update(id=%lld, buf.size=%ld, offset=%d, size=%d)\n", id, buf.size(), offset, size);
 
     // check if extent exists
     if (m_dataBlocks.find(id) == m_dataBlocks.end())
         return extent_protocol::NOENT;
 
+    // resize string
+    int newSize = offset + size;
+    int r;
+    extent_protocol::attr attr;
+    getattr(id, attr);
+    attr.size = newSize;
+    setattr(id, attr, r);
+
     // check if offset is correctly specified
     if (offset > m_dataBlocks[id].attrs.size)
-        // TODO: should we change size instead?
-        return extent_protocol::IOERR;
+        assert(false);
 
     // check if size is correctly specified
     if (offset + size > m_dataBlocks[id].attrs.size)
-        size = m_dataBlocks[id].attrs.size - offset;
+        assert(false);
 
     // update data in the extent
     m_dataBlocks[id].data.replace(offset, size, buf);
+
+    // return number of actual bytes written
+    bytesWritten = size;
 
     return extent_protocol::OK;
 }
 
 int extent_server::updateAll(extent_protocol::extentid_t id, std::string buf, int &)
 {
-    printf("extent_server::updateAll(id=%lld, buf=%s)\n", id, buf.c_str());
+    printf("extent_server::updateAll(id=%lld, buf.size=%ld)\n", id, buf.size());
 
     // check if extent exists
     if (m_dataBlocks.find(id) == m_dataBlocks.end())

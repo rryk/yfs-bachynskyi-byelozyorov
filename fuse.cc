@@ -81,31 +81,37 @@ fuseserver_getattr(fuse_req_t req, fuse_ino_t ino,
 void
 fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set, struct fuse_file_info *fi)
 {
-  printf("fuseserver_setattr 0x%x\n", to_set);
-  if (FUSE_SET_ATTR_SIZE & to_set) {
-    printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
-    struct stat st;
-    // You fill this in
-#if 0
-    fuse_reply_attr(req, &st, 0);
+    printf("fuseserver_setattr 0x%x\n", to_set);
+    if (FUSE_SET_ATTR_SIZE & to_set) {
+        printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
+        struct stat st;
+        if (yfs->setsize(ino, attr->st_size) != yfs_client::OK);
+            fuse_reply_err(req, EIO);
+
+        getattr(ino, st);
+#if 1
+        fuse_reply_attr(req, &st, 0);
 #else
-    fuse_reply_err(req, ENOSYS);
+        fuse_reply_err(req, ENOSYS);
 #endif
-  } else {
-    fuse_reply_err(req, ENOSYS);
-  }
+    } else {
+        fuse_reply_err(req, ENOSYS);
+    }
 }
 
 void
 fuseserver_read(fuse_req_t req, fuse_ino_t ino, size_t size,
       off_t off, struct fuse_file_info *fi)
 {
-  // You fill this in
-#if 0
-  fuse_reply_buf(req, buf, size);
-#else
-  fuse_reply_err(req, ENOSYS);
-#endif
+    printf("fuseserver_read(ino=%ld,size=%ld,off=%ld)\n",ino,size,off);
+
+    std::string buf;
+    if (yfs->retrieve(ino, off, size, buf) != yfs_client::OK)
+    {
+        printf("Failed to read!!!");
+        fuse_reply_err(req, EIO);
+    }
+    fuse_reply_buf(req, buf.c_str(), buf.size());
 }
 
 void
@@ -113,12 +119,15 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
   const char *buf, size_t size, off_t off,
   struct fuse_file_info *fi)
 {
-  // You fill this in
-#if 0
-  fuse_reply_write(req, bytes_written);
-#else
-  fuse_reply_err(req, ENOSYS);
-#endif
+    printf("fuseserver_write(ino=%ld,buf=%s,size=%ld,off=%ld)\n",ino,buf,size,off);
+
+    int bytesWritten;
+    if (yfs->update(ino, std::string(buf), off, size, bytesWritten) != yfs_client::OK)
+    {
+        printf("Failed to write!!!");
+        fuse_reply_err(req, EIO);
+    }
+    fuse_reply_write(req, bytesWritten);
 }
 
 yfs_client::status
@@ -189,7 +198,6 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     printf("fuseserver_lookup(req=?,parent=%ld,name=%s)\n",parent,name);
 
-    yfs_client::status r;
     struct fuse_entry_param e;
     bzero(&(e.attr), sizeof(e.attr));
     e.ino=0;
@@ -215,8 +223,6 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
         fuse_reply_err(req, ENOENT);
         return;
     }
-
-    printf("Lookup Before Listing %u\n", dirEntries.capacity());
 
     // read listing for the dir
     int res = yfs->listing(parentInum, dirEntries);
@@ -281,8 +287,6 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     struct dirbuf b;
     yfs_client::dirent e;
 
-    printf("fuseserver_readdir\n");
-
     if(!yfs->isdir(inum)){
     fuse_reply_err(req, ENOTDIR);
     return;
@@ -292,10 +296,8 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
     // get listing for the dir
     std::vector<yfs_client::dirent> dirEntries;
-    printf("Readdir Before Listing\n");
 
     yfs->listing(inum, dirEntries);
-    printf("Readdir After Listing\n");
 
     // walk over files and add information about them to the FUSE buffer
     for (std::vector<yfs_client::dirent>::const_iterator it =
@@ -313,8 +315,11 @@ void
 fuseserver_open(fuse_req_t req, fuse_ino_t ino,
      struct fuse_file_info *fi)
 {
-  // You fill this in
-#if 0
+    // TODO: What do we do here? Should we fill fi and how?
+    fi->keep_cache = 0;
+    fi->fh = 0;
+    fi->direct_io = 0;
+#if 1
   fuse_reply_open(req, fi);
 #else
   fuse_reply_err(req, ENOSYS);

@@ -15,7 +15,7 @@ class extent_client {
   extent_client(std::string dst);
 
   extent_protocol::status create(extent_protocol::extentid_t id);
-  extent_protocol::status update(extent_protocol::extentid_t id, std::string buf, int offset, int size);
+  extent_protocol::status update(extent_protocol::extentid_t id, std::string buf, int offset, int size, int & bytesWritten);
   extent_protocol::status updateAll(extent_protocol::extentid_t id, std::string buf);
   extent_protocol::status retrieve(extent_protocol::extentid_t id, int offset, int size, std::string &buf);
   extent_protocol::status retrieveAll(extent_protocol::extentid_t id, std::string &buf);

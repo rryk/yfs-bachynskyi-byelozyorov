@@ -161,21 +161,21 @@ int yfs_client::create(inum parentINum, inum fileINum, const char * fileName)
     return OK;
 }
 
-int yfs_client::update(inum parentINum, inum fileINum, std::string content, int offset, int size)
+int yfs_client::update(inum fileINum, std::string content, int offset, int size, int & bytesWritten)
 {
-    printf("yfs_client::update %016llx in directory %016llx\n", fileINum, parentINum);
+    printf("yfs_client::update %016llx\n", fileINum);
 
     // Update file content
-    if (ec->update(fileINum, content, offset, size) != extent_protocol::OK)
+    if (ec->update(fileINum, content, offset, size, bytesWritten) != extent_protocol::OK)
         // failed to write to the file
         return IOERR;
 
     return OK;
 }
 
-int yfs_client::retrieve(inum parentINum, inum fileINum, int offset, int size, std::string &content)
+int yfs_client::retrieve(inum fileINum, int offset, int size, std::string &content)
 {
-    printf("yfs_client::update %016llx in directory %016llx\n", fileINum, parentINum);
+    printf("yfs_client::update %016llx\n", fileINum);
 
     // Retrieve file content
     if (ec->retrieve(fileINum, offset, size, content) != extent_protocol::OK)

@@ -27,11 +27,10 @@ extent_protocol::status extent_client::create(extent_protocol::extentid_t id)
     return ret;
 }
 
-extent_protocol::status extent_client::update(extent_protocol::extentid_t id, std::string buf, int offset, int size)
+extent_protocol::status extent_client::update(extent_protocol::extentid_t id, std::string buf, int offset, int size, int & bytesWritten)
 {
     extent_protocol::status ret;
-    int r;
-    ret = cl->call(extent_protocol::update, id, buf, offset, size, r);
+    ret = cl->call(extent_protocol::update, id, buf, offset, size, bytesWritten);
     return ret;
 }
 

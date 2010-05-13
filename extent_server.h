@@ -23,7 +23,7 @@ class extent_server {
   int create(extent_protocol::extentid_t id, int &);
 
   // update extent content
-  int update(extent_protocol::extentid_t id, std::string buf, unsigned offset, unsigned size, int &);
+  int update(extent_protocol::extentid_t id, std::string buf, unsigned offset, unsigned size, int & bytesWritten);
 
   // update full extent content (with resize)
   int updateAll(extent_protocol::extentid_t id, std::string buf, int &);
