@@ -42,6 +42,9 @@ class extent_server {
 
   // remove an extent
   int remove(extent_protocol::extentid_t id, int &);
+
+private:
+  void reallocateString(std::string &str, unsigned newSize);
 };
 
 #endif 

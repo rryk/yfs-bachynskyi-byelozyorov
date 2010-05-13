@@ -41,27 +41,18 @@ int extent_server::create(extent_protocol::extentid_t id, int &)
 
 int extent_server::update(extent_protocol::extentid_t id, std::string buf, unsigned offset, unsigned size, int & bytesWritten)
 {
-    printf("extent_server::update(id=%lld, buf.size=%ld, offset=%d, size=%d)\n", id, buf.size(), offset, size);
+    printf("extent_server::update(id=%lld, buf=%s, offset=%d, size=%d)\n", id, buf.c_str(), offset, size);
 
     // check if extent exists
     if (m_dataBlocks.find(id) == m_dataBlocks.end())
         return extent_protocol::NOENT;
 
     // resize string
-    int newSize = offset + size;
-    int r;
-    extent_protocol::attr attr;
-    getattr(id, attr);
-    attr.size = newSize;
-    setattr(id, attr, r);
-
-    // check if offset is correctly specified
-    if (offset > m_dataBlocks[id].attrs.size)
-        assert(false);
-
-    // check if size is correctly specified
-    if (offset + size > m_dataBlocks[id].attrs.size)
-        assert(false);
+    if (offset + size > m_dataBlocks[id].data.size())
+    {
+        reallocateString(m_dataBlocks[id].data, offset + size);
+        m_dataBlocks[id].attrs.size = offset + size;
+    }
 
     // update data in the extent
     m_dataBlocks[id].data.replace(offset, size, buf);
@@ -74,7 +65,7 @@ int extent_server::update(extent_protocol::extentid_t id, std::string buf, unsig
 
 int extent_server::updateAll(extent_protocol::extentid_t id, std::string buf, int &)
 {
-    printf("extent_server::updateAll(id=%lld, buf.size=%ld)\n", id, buf.size());
+    printf("extent_server::updateAll(id=%lld, buf=%s)\n", id, buf.c_str());
 
     // check if extent exists
     if (m_dataBlocks.find(id) == m_dataBlocks.end())
@@ -142,29 +133,22 @@ int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr
     // get attributes for the extent
     a = m_dataBlocks[id].attrs;
 
+    printf(" --> a.size=%d\n", a.size);
+
     return extent_protocol::OK;
 }
 
 int extent_server::setattr(extent_protocol::extentid_t id, extent_protocol::attr a, int &)
 {
-    printf("extent_server::setattr(id=%lld)\n", id);
+    printf("extent_server::setattr(id=%lld,a.size=%d)\n", id, a.size);
 
     // check if extent exists
     if (m_dataBlocks.find(id) == m_dataBlocks.end())
         return extent_protocol::NOENT;
 
-    // reallocate string buffer if needed
-    if (a.size < m_dataBlocks[id].attrs.size)
-    {
-        std::string newData(m_dataBlocks[id].data, 0, a.size);
-        m_dataBlocks[id].data = newData;
-    }
-    else if (a.size > m_dataBlocks[id].attrs.size)
-    {
-        std::string newData(a.size, 0);
-        newData.replace(0, a.size, m_dataBlocks[id].data);
-        m_dataBlocks[id].data = newData;
-    }
+    // reallocate data buffer if size have changed
+    if (a.size != m_dataBlocks[id].attrs.size)
+        reallocateString(m_dataBlocks[id].data, a.size);
 
     // get attributes for the extent
     m_dataBlocks[id].attrs = a;
@@ -186,3 +170,16 @@ int extent_server::remove(extent_protocol::extentid_t id, int &)
     return extent_protocol::OK;
 }
 
+void extent_server::reallocateString(std::string &str, unsigned newSize)
+{
+    printf("exten_server::reallocateString, oldSize=%u, newSize=%u", str.size(), newSize);
+    if (str.size() > newSize)
+        str = std::string(str, 0, newSize);
+    else if (str.size() < newSize)
+    {
+        std::string newStr = std::string(newSize, '\0');
+        newStr.replace(0, str.size(), str);
+        str = newStr;
+    }
+    printf(", updatedSize=%u\n", str.size());
+}
