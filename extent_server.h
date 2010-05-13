@@ -19,9 +19,28 @@ class extent_server {
  public:
   extent_server();
 
-  int put(extent_protocol::extentid_t id, std::string, int &);
-  int get(extent_protocol::extentid_t id, std::string &);
+  // create an extent
+  int create(extent_protocol::extentid_t id, int &);
+
+  // update extent content
+  int update(extent_protocol::extentid_t id, std::string buf, unsigned offset, unsigned size, int &);
+
+  // update full extent content (with resize)
+  int updateAll(extent_protocol::extentid_t id, std::string buf, int &);
+
+  // get extent content
+  int retrieve(extent_protocol::extentid_t id, unsigned offset, unsigned size, std::string &buf);
+
+  // get full extent content
+  int retrieveAll(extent_protocol::extentid_t id, std::string &buf);
+
+  // get extent attributes
   int getattr(extent_protocol::extentid_t id, extent_protocol::attr &);
+
+  // set extent attributes
+  int setattr(extent_protocol::extentid_t id, extent_protocol::attr, int &);
+
+  // remove an extent
   int remove(extent_protocol::extentid_t id, int &);
 };
 

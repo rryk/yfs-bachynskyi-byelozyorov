@@ -13,19 +13,6 @@
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
     ec = new extent_client(extent_dst);
-
-    // check for the root dir
-    extent_protocol::attr attr;
-    if (ec->getattr(0x00000001, attr) == extent_protocol::NOENT)
-    {
-        // create root dir
-        if (ec->put(0x00000001, "") != extent_protocol::OK)
-        {
-            // crash on failure
-            printf("ERROR: Can't create root directory on the extent server. Peacefully crashing...\n");
-            exit(0);
-        }
-    }
 }
 
 yfs_client::inum
@@ -76,7 +63,6 @@ yfs_client::getfile(inum inum, fileinfo &fin)
   fin.mtime = a.mtime;
   fin.ctime = a.ctime;
   fin.size = a.size;
-  printf("getfile %016llx -> sz %llu\n", inum, fin.size);
 
  release:
 
@@ -104,26 +90,25 @@ yfs_client::getdir(inum inum, dirinfo &din)
 }
 
 int
-yfs_client::getlisting(inum inum, std::vector<dirent> & entries)
+yfs_client::listing(inum inum, std::vector<dirent> & entries)
 {
-    printf("getlisting %016llx\n", inum);
+    printf("yfs_client::listing %016llx\n", inum);
 
-    // get directory content
+    // Get directory content
     std::string buf;
-    if (ec->get(inum, buf) != extent_protocol::OK)
+    if (ec->retrieveAll(inum, buf) != extent_protocol::OK)
+        // failed to read dir
         return IOERR;
 
     /* Dir structure format:
      *   filename1:inum1:filename2:inum2:filename3:inum3...
      */
 
-    // create mutable copy of the string as needed by strtok
+    // Create mutable copy of the string as needed by strtok
     char dirContent[buf.length()];
     strcpy(dirContent, buf.c_str());
 
-    printf("getlisting %016llx -> dirContent = `%s`\n", inum, dirContent);
-
-    // read until there are more files
+    // Read until there are more files
     const char * filenameStr = strtok(dirContent, ":");
     const char * inumStr;
     while (filenameStr != NULL)
@@ -146,35 +131,76 @@ yfs_client::getlisting(inum inum, std::vector<dirent> & entries)
 
     }
 
-    for (std::vector<yfs_client::dirent>::const_iterator it =
-         entries.begin(); it != entries.end(); it++)
-    {
-        printf("Entry %s, %016llx",it->name.c_str(), it->inum);
-    }
+    return OK;
+}
+
+int yfs_client::create(inum parentINum, inum fileINum, const char * fileName)
+{
+    printf("yfs_client::create %016llx in directory %016llx\n", fileINum, parentINum);
+
+    // Add file with inum to server
+    if (ec->create(fileINum) != extent_protocol::OK)
+        return IOERR;
+
+    // Get directory content from server
+    std::string dirContent;
+    if (ec->retrieveAll(parentINum, dirContent) != extent_protocol::OK)
+        // failed to read dir content
+        return NOENT;
+
+    // Append information about file to directory information
+    if (!dirContent.empty())
+        dirContent.append(":");
+    dirContent.append(fileName).append(":").append(filename(fileINum));
+
+    // Update directory content on the server
+    if (ec->updateAll(parentINum, dirContent) != extent_protocol::OK)
+        // failed to update dir
+        return IOERR;
 
     return OK;
 }
 
-int yfs_client::putfile(inum parentINum, const char * fileName, inum fileINum, std::string content)
+int yfs_client::update(inum parentINum, inum fileINum, std::string content, int offset, int size)
 {
-    std::string dirContent;
-    printf("putfile %016llx in directory %016llx\n", fileINum, parentINum);
+    printf("yfs_client::update %016llx in directory %016llx\n", fileINum, parentINum);
 
-    // Add file with inum to server
-    if (ec->put(fileINum, content) != extent_protocol::OK)
+    // Update file content
+    if (ec->update(fileINum, content, offset, size) != extent_protocol::OK)
+        // failed to write to the file
         return IOERR;
 
-    // Get directory content from server
-    if (ec->get(parentINum, dirContent) != extent_protocol::OK)
-        return NOENT;
+    return OK;
+}
 
-    // Append information about file to directory information
-    if (! dirContent.empty())
-        dirContent.append(":");
-    dirContent.append(fileName).append(":").append(filename(fileINum));
+int yfs_client::retrieve(inum parentINum, inum fileINum, int offset, int size, std::string &content)
+{
+    printf("yfs_client::update %016llx in directory %016llx\n", fileINum, parentINum);
 
-    // Add changed directory content to server
-    if (ec->put(parentINum, dirContent) != extent_protocol::OK)
+    // Retrieve file content
+    if (ec->retrieve(fileINum, offset, size, content) != extent_protocol::OK)
+        // failed to write to the file
+        return IOERR;
+
+    return OK;
+}
+
+int yfs_client::setsize(inum fileINum, int newSize)
+{
+    printf("yfs_client::setattr %016llx\n", fileINum);
+
+    // Get current attr
+    extent_protocol::attr attr;
+    if (ec->getattr(fileINum, attr) != extent_protocol::OK)
+        // failed to read current attributes from file/dir
+        return IOERR;
+
+    // Set new size
+    attr.size = newSize;
+
+    // Update file/dir attributes on the server
+    if (ec->setattr(fileINum, attr) != extent_protocol::OK)
+        // failed to update attributes for the file/dir
         return IOERR;
 
     return OK;

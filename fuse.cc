@@ -140,8 +140,7 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
     printf("fuseserver_createhelper(), generated id: %lld\n", fileINum);
 
     // Storing file to server
-    std::string content = "";
-    r=yfs->putfile(parent,name,fileINum,content);
+    r=yfs->create(parent, fileINum, name);
     if (r!=yfs_client::OK)
         return yfs_client::NOENT;
 
@@ -188,83 +187,60 @@ void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent,
 void
 fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-  printf("fuseserver_lookup(req=?,parent=%ld,name=%s)\n",parent,name);
+    printf("fuseserver_lookup(req=?,parent=%ld,name=%s)\n",parent,name);
 
-  yfs_client::status r;
-  struct fuse_entry_param e;
-  bzero(&(e.attr), sizeof(e.attr));
-  e.ino=0;
-  e.generation=0;
-  e.entry_timeout=0.0;
-  e.attr_timeout=0.0;
+    yfs_client::status r;
+    struct fuse_entry_param e;
+    bzero(&(e.attr), sizeof(e.attr));
+    e.ino=0;
+    e.generation=0;
+    e.entry_timeout=0.0;
+    e.attr_timeout=0.0;
 
-  yfs_client::dirinfo dirInfo;
-  std::vector<yfs_client::dirent> dirEntries;
+    yfs_client::dirinfo dirInfo;
+    std::vector<yfs_client::dirent> dirEntries;
 
-  yfs_client::inum parentInum = parent;
+    yfs_client::inum parentInum = parent;
 
-  // check whether parent is a dir
-  if (!yfs->isdir(parentInum))
-  {
-      fuse_reply_err(req, ENOTDIR);
-      return;
-  }
+    // check whether parent is a dir
+    if (!yfs->isdir(parentInum))
+    {
+        fuse_reply_err(req, ENOTDIR);
+        return;
+    }
 
-  // check whether parent exists
-  if (yfs->getdir(parentInum, dirInfo) != extent_protocol::OK)
-  {
-      fuse_reply_err(req, ENOENT);
-      return;
-  }
+    // check whether parent exists
+    if (yfs->getdir(parentInum, dirInfo) != extent_protocol::OK)
+    {
+        fuse_reply_err(req, ENOENT);
+        return;
+    }
 
-  printf("Lookup Before Listing %u\n", dirEntries.capacity());
+    printf("Lookup Before Listing %u\n", dirEntries.capacity());
 
-  // read listing for the dir
-  int res = yfs->getlisting(parentInum, dirEntries);
-  printf("Lookup After Listing\n");
+    // read listing for the dir
+    int res = yfs->listing(parentInum, dirEntries);
 
-  // this should be true, since we checked that dir exists
-  assert(res == extent_protocol::OK);
+    // this should be true, since we checked that dir exists
+    assert(res == extent_protocol::OK);
 
-  for (std::vector<yfs_client::dirent>::const_iterator it =
-       dirEntries.begin(); it != dirEntries.end(); it++)
-  {
-      if (it->name.compare(name) == 0)
-      {
-          // convert identifier for FUSE (ignore higher 32 bits)
-          e.ino = static_cast<fuse_ino_t>(it->inum);
-          e.generation=1;
+    for (std::vector<yfs_client::dirent>::const_iterator it = dirEntries.begin(); it != dirEntries.end(); it++)
+    {
+        if (it->name.compare(name) == 0)
+        {
+            // convert identifier for FUSE (ignore higher 32 bits)
+            e.ino = static_cast<fuse_ino_t>(it->inum);
+            e.generation=1;
 
-          if(yfs->isfile(it->inum)){
-             yfs_client::fileinfo info;
-             r = yfs->getfile(it->inum, info);
-             if(r != yfs_client::OK)
-                 fuse_reply_err(req, EIO);
-             e.attr.st_mode = S_IFREG | 0666;
-             e.attr.st_nlink = 1;
-             e.attr.st_atime = info.atime;
-             e.attr.st_mtime = info.mtime;
-             e.attr.st_ctime = info.ctime;
-             e.attr.st_size = info.size;
-           } else {
-             yfs_client::dirinfo info;
-             r = yfs->getdir(it->inum, info);
-             if(r != yfs_client::OK)
-               fuse_reply_err(req, EIO);
-             e.attr.st_mode = S_IFDIR | 0777;
-             e.attr.st_nlink = 2;
-             e.attr.st_atime = info.atime;
-             e.attr.st_mtime = info.mtime;
-             e.attr.st_ctime = info.ctime;
-           }
+            getattr(it->inum, e.attr);
 
-           fuse_reply_entry(req, &e);
+            fuse_reply_entry(req, &e);
 
-           return;
-       }
-  }
+            return;
+        }
+    }
 
-  fuse_reply_err(req, ENOENT);
+    fuse_reply_err(req, ENOENT);
 }
 
 
@@ -318,7 +294,7 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     std::vector<yfs_client::dirent> dirEntries;
     printf("Readdir Before Listing\n");
 
-    yfs->getlisting(inum, dirEntries);
+    yfs->listing(inum, dirEntries);
     printf("Readdir After Listing\n");
 
     // walk over files and add information about them to the FUSE buffer

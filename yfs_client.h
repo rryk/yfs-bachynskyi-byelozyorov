@@ -45,8 +45,11 @@
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);
 
-  int getlisting(inum, std::vector<dirent> &);
-  int putfile(inum parentINum, const char * fileName, inum fileINum, std::string content);
+  int listing(inum, std::vector<dirent> &);
+  int create(inum parentINum, inum fileINum, const char * fileName);
+  int update(inum parentINum, inum fileINum, std::string content, int offset, int size);
+  int retrieve(inum parentINum, inum fileINum, int offset, int size, std::string &content);
+  int setsize(inum fileINum, int newSize);
 };
 
 #endif 
