@@ -170,7 +170,7 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
     e->attr.st_ctime = info.ctime;
     e->attr.st_size = info.size;
 
-  return yfs_client::OK;
+    return yfs_client::OK;
 }
 
 void
@@ -208,8 +208,7 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     e.attr_timeout=0.0;
 
     yfs_client::dirinfo dirInfo;
-    std::vector<yfs_client::dirent> dirEntries;
-
+    
     yfs_client::inum parentInum = parent;
 
     // check whether parent is a dir
@@ -219,35 +218,20 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
         return;
     }
 
-    // check whether parent exists
-    if (yfs->getdir(parentInum, dirInfo) != extent_protocol::OK)
+    yfs_client::inum res = yfs->ilookup(parentInum, name)
+    
+    if (res != 0)
     {
-        fuse_reply_err(req, ENOENT);
+        e.ino = res;
+        e.generation = 1;
+        
+        getattr(res, e.attr);
+        fuse_reply_entry(req, &e);
+        
         return;
     }
-
-    // read listing for the dir
-    int res = yfs->listing(parentInum, dirEntries);
-
-    // this should be true, since we checked that dir exists
-    assert(res == extent_protocol::OK);
-
-    for (std::vector<yfs_client::dirent>::const_iterator it = dirEntries.begin(); it != dirEntries.end(); it++)
-    {
-        if (it->name.compare(name) == 0)
-        {
-            // convert identifier for FUSE (ignore higher 32 bits)
-            e.ino = static_cast<fuse_ino_t>(it->inum);
-            e.generation=1;
-
-            getattr(it->inum, e.attr);
-
-            fuse_reply_entry(req, &e);
-
-            return;
-        }
-    }
-
+    
+    fuse_reply_err(req, ENOENT);
     fuse_reply_err(req, ENOENT);
 }
 
@@ -342,11 +326,13 @@ fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 void
 fuseserver_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-
-  // You fill this in
-  // Success:	fuse_reply_err(req, 0);
-  // Not found:	fuse_reply_err(req, ENOENT);
-  fuse_reply_err(req, ENOSYS);
+    yfs_client::status res = yfs->remove(parent, name);
+    if (res == yfs_client::NOENT)
+        fuse_reply_err(req, ENOENT);
+    else if (res == yfs_client::IOERR)
+        fuse_reply_err(req, EIO);
+    else
+        fuse_reply_err(req, 0);
 }
 
 void

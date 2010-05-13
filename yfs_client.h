@@ -50,6 +50,7 @@
   int update(inum fileINum, std::string content, int offset, int size, int & bytesWritten);
   int retrieve(inum fileINum, int offset, int size, std::string &content);
   int setsize(inum fileINum, int newSize);
+  int remove(inum parentINum, const char * fileName);
 };
 
 #endif 

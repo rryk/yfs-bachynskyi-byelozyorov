@@ -89,6 +89,24 @@ yfs_client::getdir(inum inum, dirinfo &din)
   return r;
 }
 
+inum yfs_client::ilookup(inum di, std::string name)
+{
+    // read listing for the dir
+    std::vector<yfs_client::dirent> dirEntries;
+    int res = listing(di, dirEntries);
+    
+    // check whether listing was retrieved successfully
+    if (res != OK)
+        return 0;
+    
+    // search for the file
+    for (std::vector<dirent>::const_iterator it = dirEntries.begin(); it != dirEntries.end(); it++)
+        if (it->name.compare(name) == 0)
+            return it->inum;
+            
+    return 0;
+}
+
 int
 yfs_client::listing(inum inum, std::vector<dirent> & entries)
 {
@@ -204,4 +222,19 @@ int yfs_client::setsize(inum fileINum, int newSize)
         return IOERR;
 
     return OK;
+}
+
+int yfs_client::remove(inum parentINum, const char * fileName)
+{
+    printf("yfs_client::remove %s in %016llx", fileName, parentINum);
+    
+    inum res = ilookup(parentINum, std::string(fileName));
+    if (res == 0)
+        return NOENT;
+        
+    if (ec->remove(res) != extent_protocol::OK)
+        return IOERR;
+        
+    return OK;
+    
 }
