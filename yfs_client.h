@@ -46,6 +46,13 @@
 
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);
+
+  int listing(inum, std::vector<dirent> &);
+  int create(inum parentINum, inum fileINum, const char * fileName);
+  int update(inum fileINum, std::string content, int offset, int size, int & bytesWritten);
+  int retrieve(inum fileINum, int offset, int size, std::string &content);
+  int setsize(inum fileINum, int newSize);
+  int remove(inum parentINum, const char * fileName);
 };
 
 #endif 
