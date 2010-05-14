@@ -20,9 +20,9 @@ for(my $iters = 0; $iters < 200; $iters++){
 }
 
 for(my $iters = 0; $iters < 100; $iters++){
-#    if(rand() < 0.1){
-#        livecheck();
-#    }
+    if(rand() < 0.1){
+        livecheck();
+    }
     if(rand() < 0.1){
         deadcheck();
     }

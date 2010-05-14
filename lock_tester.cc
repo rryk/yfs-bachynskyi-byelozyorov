@@ -143,23 +143,6 @@ test5(void *x)
   return 0;
 }
 
-/*
-void *
-test6(void *x) 
-{
-  int i = * (int *) x;
-  for (int k = 0; k<100; k++)
-  {
-    lc[i]->acquire(a);
-    check_grant(a);
-    //sleep(1);
-    check_release(a);
-    lc[i]->release(a);
-  }
-  return 0;
-}
-*/
-
 int
 main(int argc, char *argv[])
 {
@@ -251,20 +234,6 @@ main(int argc, char *argv[])
 	pthread_join(th[i], NULL);
       }
     }
-
-/*
-    if(!test || test == 6){
-      // test6
-      for (int i = 0; i < nt; i++) {
-	int *a = new int (i);
-	r = pthread_create(&th[i], NULL, test6, (void *) a);
-	assert (r == 0);
-      }
-      for (int i = 0; i < nt; i++) {
-	pthread_join(th[i], NULL);
-      }
-    }
-*/
 
     printf ("%s: passed all tests successfully\n", argv[0]);
 
