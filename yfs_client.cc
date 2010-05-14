@@ -89,7 +89,7 @@ yfs_client::getdir(inum inum, dirinfo &din)
   return r;
 }
 
-inum yfs_client::ilookup(inum di, std::string name)
+yfs_client::inum yfs_client::ilookup(inum di, std::string name)
 {
     // read listing for the dir
     std::vector<yfs_client::dirent> dirEntries;

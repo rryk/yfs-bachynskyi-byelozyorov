@@ -218,7 +218,7 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
         return;
     }
 
-    yfs_client::inum res = yfs->ilookup(parentInum, name)
+    yfs_client::inum res = yfs->ilookup(parentInum, name);
     
     if (res != 0)
     {
@@ -301,11 +301,8 @@ void
 fuseserver_open(fuse_req_t req, fuse_ino_t ino,
      struct fuse_file_info *fi)
 {
-    // TODO: What do we do here? Should we fill fi and how?
-    fi->keep_cache = 0;
-    fi->fh = 0;
-    fi->direct_io = 0;
-
+    if (yfs->isdir(ino))
+        fuse_reply_err(req, EISDIR);
     fuse_reply_open(req, fi);
 }
 
