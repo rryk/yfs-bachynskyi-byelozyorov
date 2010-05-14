@@ -57,6 +57,9 @@ int extent_server::update(extent_protocol::extentid_t id, std::string buf, unsig
     // update data in the extent
     m_dataBlocks[id].data.replace(offset, size, buf);
 
+    // setting modification time
+    m_dataBlocks[id].attrs.mtime = time(NULL);
+
     // return number of actual bytes written
     bytesWritten = size;
 
@@ -74,6 +77,9 @@ int extent_server::updateAll(extent_protocol::extentid_t id, std::string buf, in
     // update data in the extent
     m_dataBlocks[id].data = buf;
     m_dataBlocks[id].attrs.size = buf.size();
+
+    // setting modification time
+    m_dataBlocks[id].attrs.mtime = time(NULL);
 
     return extent_protocol::OK;
 }

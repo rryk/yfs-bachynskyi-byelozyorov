@@ -101,7 +101,7 @@ void
 fuseserver_read(fuse_req_t req, fuse_ino_t ino, size_t size,
       off_t off, struct fuse_file_info *fi)
 {
-    printf("fuseserver_read(ino=%ld,size=%ld,off=%ld)\n",ino,size,off);
+    printf("fuseserver_read(ino=%ld,size=%u,off=%ld)\n",ino,size,off);
 
     std::string buf;
     if (yfs->retrieve(ino, off, size, buf) != yfs_client::OK)
@@ -119,7 +119,7 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
   const char *buf, size_t size, off_t off,
   struct fuse_file_info *fi)
 {
-    printf("fuseserver_write(ino=%ld,buf=%s,size=%ld,off=%ld)\n",ino,buf,size,off);
+    printf("fuseserver_write(ino=%ld,buf=%s,size=%u,off=%ld)\n",ino,buf,size,off);
 
     int bytesWritten;
     if (yfs->update(ino, std::string(buf, size), off, size, bytesWritten) != yfs_client::OK)
@@ -207,8 +207,7 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     e.entry_timeout=0.0;
     e.attr_timeout=0.0;
 
-    yfs_client::dirinfo dirInfo;
-    
+
     yfs_client::inum parentInum = parent;
 
     // check whether parent is a dir
@@ -267,7 +266,7 @@ void
 fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
           off_t off, struct fuse_file_info *fi)
 {
-    printf("fuseserver_readdir(req=?,ino=%ld,size=%ld,off=%ld,fi=?)\n",ino,size,off);
+    printf("fuseserver_readdir(req=?,ino=%ld,size=%u,off=%ld,fi=?)\n",ino,size,off);
 
     yfs_client::inum inum = ino; // req->in.h.nodeid;
     struct dirbuf b;
@@ -310,14 +309,50 @@ void
 fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
      mode_t mode)
 {
-  struct fuse_entry_param e;
+    struct fuse_entry_param e;
 
-  // You fill this in
-#if 0
-  fuse_reply_entry(req, &e);
-#else
-  fuse_reply_err(req, ENOSYS);
-#endif
+    printf("fuseserver_mkdir(parent=%ld,name=%s,mode=%d,e=?)\n",parent,name,mode);
+
+    // Creating 0 response
+    yfs_client::status r;
+    bzero(&(e.attr), sizeof(e.attr));
+    e.ino=0;
+    e.generation=0;
+    e.entry_timeout=0.0;
+    e.attr_timeout=0.0;
+
+    // Generation of 32 bits inum
+    yfs_client::inum dirINum = random() & 0x7fffffff;
+    printf("fuseserver_mkdir(), generated id: %lld\n", dirINum);
+
+    // Storing dir to server
+    r=yfs->create(parent, dirINum, name);
+    if (r!=yfs_client::OK)
+    {
+        fuse_reply_err(req,ENOENT);
+    }
+    else
+    {
+        // Getting dir information
+        yfs_client::dirinfo info;
+        r=yfs->getdir(dirINum,info);
+        if (r!=yfs_client::OK)
+        {
+            fuse_reply_err(req,EIO);
+        }
+        else
+        {
+            e.ino=dirINum;
+            e.generation=1;
+            e.attr.st_mode = S_IFDIR | 0777;
+            e.attr.st_nlink = 2;
+            e.attr.st_atime = info.atime;
+            e.attr.st_mtime = info.mtime;
+            e.attr.st_ctime = info.ctime;
+
+            fuse_reply_entry(req, &e);
+        }
+    }
 }
 
 void
