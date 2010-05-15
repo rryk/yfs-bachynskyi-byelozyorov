@@ -236,31 +236,22 @@ int yfs_client::remove(inum parentINum, const char * fileName)
     if (ec->remove(res) != extent_protocol::OK)
         return IOERR;
 
-    // Getting parent directory content
-    std::string dirContent;
-    if (ec->retrieveAll(parentINum, dirContent) != extent_protocol::OK)
+    // Getting directory listing
+    std::vector<dirent> dirEntries;
+    if (listing(parentINum, dirEntries)!=OK)
         return IOERR;
 
-    // finding file name and inum and deleting them from content
-    std::string str1;
-    std::string str2;
-    int fileNameBegin=dirContent.find(fileName);
-    if (fileNameBegin!=0)
+    // search for entry to delete
+    std::string dirContent;
+    for (std::vector<dirent>::const_iterator it = dirEntries.begin(); it != dirEntries.end(); it++)
     {
-        str1=dirContent.substr(0,fileNameBegin-1);
-        str2=dirContent.substr(fileNameBegin,dirContent.length()-fileNameBegin);
+        if (it->name.compare(fileName) != 0)
+        {
+            if (!dirContent.empty())
+                dirContent.append(":");
+            dirContent.append(it->name).append(":").append(filename(it->inum));
+        }
     }
-    else
-    {
-        str1="";
-        str2=dirContent;
-    }
-    int splitPos=str2.find(":",0);
-    splitPos= str2.find(":",splitPos+1);
-    str2=str2.substr(splitPos+1,str2.length()-(splitPos+1));
-    if (! str1.empty() && ! str2.empty())
-        str1+=":";
-    dirContent=str1+str2;
 
     // Updating directory content
     if (ec->updateAll(parentINum,dirContent)!=extent_protocol::OK)
