@@ -235,7 +235,37 @@ int yfs_client::remove(inum parentINum, const char * fileName)
         
     if (ec->remove(res) != extent_protocol::OK)
         return IOERR;
-        
+
+    // Getting parent directory content
+    std::string dirContent;
+    if (ec->retrieveAll(parentINum, dirContent) != extent_protocol::OK)
+        return IOERR;
+
+    // finding file name and inum and deleting them from content
+    std::string str1;
+    std::string str2;
+    int fileNameBegin=dirContent.find(fileName);
+    if (fileNameBegin!=0)
+    {
+        str1=dirContent.substr(0,fileNameBegin-1);
+        str2=dirContent.substr(fileNameBegin,dirContent.length()-fileNameBegin);
+    }
+    else
+    {
+        str1="";
+        str2=dirContent;
+    }
+    int splitPos=str2.find(":",0);
+    splitPos= str2.find(":",splitPos+1);
+    str2=str2.substr(splitPos+1,str2.length()-(splitPos+1));
+    if (! str1.empty() && ! str2.empty())
+        str1+=":";
+    dirContent=str1+str2;
+
+    // Updating directory content
+    if (ec->updateAll(parentINum,dirContent)!=extent_protocol::OK)
+        return IOERR;
+
     return OK;
     
 }

@@ -159,6 +159,9 @@ int extent_server::setattr(extent_protocol::extentid_t id, extent_protocol::attr
     // get attributes for the extent
     m_dataBlocks[id].attrs = a;
 
+    // setting modification time
+    m_dataBlocks[id].attrs.mtime = time(NULL);
+
     return extent_protocol::OK;
 }
 
