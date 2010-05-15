@@ -78,8 +78,9 @@ int extent_server::updateAll(extent_protocol::extentid_t id, std::string buf, in
     m_dataBlocks[id].data = buf;
     m_dataBlocks[id].attrs.size = buf.size();
 
-    // setting modification time
+    // setting modification times
     m_dataBlocks[id].attrs.mtime = time(NULL);
+    m_dataBlocks[id].attrs.ctime = time(NULL);
 
     return extent_protocol::OK;
 }
