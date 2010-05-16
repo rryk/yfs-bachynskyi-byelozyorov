@@ -11,6 +11,7 @@
 
   class yfs_client {
   extent_client *ec;
+  lock_client *lc;
  public:
 
   typedef unsigned long long inum;
@@ -43,6 +44,9 @@
   bool isfile(inum);
   bool isdir(inum);
   inum ilookup(inum di, std::string name);
+
+  lock_protocol::status acquire(lock_protocol::lockid_t);
+  lock_protocol::status release(lock_protocol::lockid_t);
 
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);

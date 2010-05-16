@@ -14,6 +14,7 @@
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
     ec = new extent_client(extent_dst);
+    lc = new lock_client(lock_dst);
 }
 
 yfs_client::inum
@@ -157,15 +158,26 @@ int yfs_client::create(inum parentINum, inum fileINum, const char * fileName)
 {
     printf("yfs_client::create %016llx in directory %016llx\n", fileINum, parentINum);
 
-    // Add file with inum to server
-    if (ec->create(fileINum) != extent_protocol::OK)
-        return IOERR;
-
     // Get directory content from server
     std::string dirContent;
     if (ec->retrieveAll(parentINum, dirContent) != extent_protocol::OK)
         // failed to read dir content
         return NOENT;
+
+    std::string f1(fileName);
+    f1.append(":");
+    std::string f2(":");
+    f2.append(f1);
+    if (dirContent.find(fileName)!=std::string::npos && (dirContent.find(f1)==0 || dirContent.find(f2) > 0))
+    {
+        printf ("!!!!!!!!!!!!!!!!!!!! Bad file name\n");
+        return IOERR;
+    }
+
+
+    // Add file with inum to server
+    if (ec->create(fileINum) != extent_protocol::OK)
+        return IOERR;
 
     // Append information about file to directory information
     if (!dirContent.empty())
@@ -229,18 +241,12 @@ int yfs_client::remove(inum parentINum, const char * fileName)
 {
     printf("yfs_client::remove %s in %016llx", fileName, parentINum);
     
-    inum res = ilookup(parentINum, std::string(fileName));
-    if (res == 0)
-        return NOENT;
-        
-    if (ec->remove(res) != extent_protocol::OK)
-        return IOERR;
-
     // Getting directory listing
     std::vector<dirent> dirEntries;
     if (listing(parentINum, dirEntries)!=OK)
         return IOERR;
 
+    inum res;
     // search for entry to delete
     std::string dirContent;
     for (std::vector<dirent>::const_iterator it = dirEntries.begin(); it != dirEntries.end(); it++)
@@ -251,12 +257,32 @@ int yfs_client::remove(inum parentINum, const char * fileName)
                 dirContent.append(":");
             dirContent.append(it->name).append(":").append(filename(it->inum));
         }
+        else
+        {
+            res=it->inum;
+        }
     }
 
     // Updating directory content
     if (ec->updateAll(parentINum,dirContent)!=extent_protocol::OK)
         return IOERR;
 
+    if (res == 0)
+        return NOENT;
+        
+    if (ec->remove(res) != extent_protocol::OK)
+        return IOERR;
+
     return OK;
     
+}
+
+lock_protocol::status yfs_client::acquire(lock_protocol::lockid_t lockID)
+{
+    return lc->acquire(lockID);
+}
+
+lock_protocol::status yfs_client::release(lock_protocol::lockid_t lockID)
+{
+    return lc->release(lockID);
 }
