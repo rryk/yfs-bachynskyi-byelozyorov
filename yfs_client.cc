@@ -158,26 +158,15 @@ int yfs_client::create(inum parentINum, inum fileINum, const char * fileName)
 {
     printf("yfs_client::create %016llx in directory %016llx\n", fileINum, parentINum);
 
+    // Add file with inum to server
+    if (ec->create(fileINum) != extent_protocol::OK)
+        return IOERR;
+
     // Get directory content from server
     std::string dirContent;
     if (ec->retrieveAll(parentINum, dirContent) != extent_protocol::OK)
         // failed to read dir content
         return NOENT;
-
-    std::string f1(fileName);
-    f1.append(":");
-    std::string f2(":");
-    f2.append(f1);
-    if (dirContent.find(fileName)!=std::string::npos && (dirContent.find(f1)==0 || dirContent.find(f2) > 0))
-    {
-        printf ("!!!!!!!!!!!!!!!!!!!! Bad file name\n");
-        return IOERR;
-    }
-
-
-    // Add file with inum to server
-    if (ec->create(fileINum) != extent_protocol::OK)
-        return IOERR;
 
     // Append information about file to directory information
     if (!dirContent.empty())

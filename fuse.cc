@@ -185,26 +185,36 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
     e->entry_timeout=0.0;
     e->attr_timeout=0.0;
 
-    // Generation of 32 bits inum
-    yfs_client::inum fileINum = random() | 0x80000000;
-    printf("fuseserver_createhelper(), generated id: %lld\n", fileINum);
-
-    // Get locks for file and directory
-    yfs->acquire(fileINum);
+    // Get locks for directory
     yfs->acquire(parent);
 
-    // Storing file to server
-    ret=yfs->create(parent, fileINum, name);
-    if (ret!=yfs_client::OK)
-        goto release;
+    yfs_client::inum fileInum=yfs->ilookup(parent, name);
+
+    if (fileInum==0)
+    {
+        // Generation of 32 bits inum
+        fileInum = random() | 0x80000000;
+        printf("fuseserver_createhelper(), generated id: %lld\n", fileInum);
+
+        yfs->acquire(fileInum);
+
+        // Storing file to server
+        ret=yfs->create(parent, fileInum, name);
+        if (ret!=yfs_client::OK)
+            goto release;
+    }
+    else
+    {
+        yfs->acquire(fileInum);
+    }
 
     // Getting file information
     yfs_client::fileinfo info;
-    ret=yfs->getfile(fileINum,info);
+    ret=yfs->getfile(fileInum,info);
     if (ret!=yfs_client::OK)
         goto release;
 
-    e->ino=fileINum;
+    e->ino=fileInum;
     e->generation=1;
     e->attr.st_mode = S_IFREG | 0666;
     e->attr.st_nlink = 1;
@@ -215,7 +225,7 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
 
 release:
     // Release locks
-    yfs->release(fileINum);
+    yfs->release(fileInum);
     yfs->release(parent);
     return ret;
 }
