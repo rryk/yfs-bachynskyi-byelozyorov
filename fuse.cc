@@ -119,7 +119,7 @@ void
 fuseserver_read(fuse_req_t req, fuse_ino_t ino, size_t size,
       off_t off, struct fuse_file_info *fi)
 {
-    printf("fuseserver_read(ino=%ld,size=%u,off=%ld)\n",ino,size,off);
+    printf("fuseserver_read(ino=%ld,size=%u,off=%u)\n",ino,size,off);
 
     std::string buf;
 

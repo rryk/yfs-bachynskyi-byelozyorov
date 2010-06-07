@@ -19,6 +19,37 @@ class lock_release_user {
 };
 
 
+class client_lock_t {
+public:
+  enum lock_status_t { NONE, FREE, LOCKED, ACQUIRING, RELEASING };
+
+    /// Constructor. Initalizes internal structures and sets "unlocked" state
+    /// for the lock.
+    client_lock_t();
+
+    /// Aquires the lock. Pauses thread until lock is released.
+    void acquired();
+
+    /// Releases the lock. Wakes up other thread waiting to aquire this lock.
+    void revoked();
+
+    /// Aquires the lock. Pauses thread until lock is released.
+    void acquiring();
+
+    /// Releases the lock. Wakes up other thread waiting to aquire this lock.
+    void releasing();
+
+    /// Returns the current status of the lock.
+    int status();
+
+private:
+    int lockStatus;
+    pthread_cond_t okToLock;
+    pthread_mutex_t mutex;
+};
+
+
+
 // SUGGESTED LOCK CACHING IMPLEMENTATION PLAN:
 //
 // to work correctly for lab 7,  all the requests on the server run till 
@@ -76,13 +107,20 @@ class lock_client_cache : public lock_client {
   std::string hostname;
   std::string id;
 
+
+  std::map<lock_protocol::lockid_t, client_lock_t> localLocks;
+  std::list<lock_protocol::lockid_t> locksToRelease;
+
  public:
+
   static int last_port;
   lock_client_cache(std::string xdst, class lock_release_user *l = 0);
   virtual ~lock_client_cache() {};
   lock_protocol::status acquire(lock_protocol::lockid_t);
   virtual lock_protocol::status release(lock_protocol::lockid_t);
   void releaser();
+  virtual rlock_protocol::status retry(lock_protocol::lockid_t lid, int &);
+  virtual rlock_protocol::status revoke(lock_protocol::lockid_t lid, int &);
 };
 #endif
 

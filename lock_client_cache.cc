@@ -61,3 +61,55 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
 {
 }
 
+// Implementation of lock_t class
+
+client_lock_t::client_lock_t()
+    : lockStatus(NONE)
+{
+    // initialize condition var
+    pthread_cond_init(&okToLock, NULL);
+
+    // initialize mutex
+    pthread_mutex_init(&mutex, NULL);
+}
+
+void client_lock_t::acquired()
+{
+    pthread_mutex_lock(&mutex);
+    while (lockStatus!=FREE)
+        pthread_cond_wait(&okToLock, &mutex);
+    lockStatus=LOCKED;
+    pthread_mutex_unlock(&mutex);
+}
+
+void client_lock_t::revoked()
+{
+    pthread_mutex_lock(&mutex);
+    lockStatus=FREE;
+    pthread_mutex_unlock(&mutex);
+    pthread_cond_signal(&okToLock);
+}
+
+void client_lock_t::acquiring()
+{
+    pthread_mutex_lock(&mutex);
+    lockStatus=ACQUIRING;
+    pthread_mutex_unlock(&mutex);
+}
+
+void client_lock_t::releasing()
+{
+    pthread_mutex_lock(&mutex);
+    lockStatus=RELEASING;
+    pthread_mutex_unlock(&mutex);
+}
+
+int client_lock_t::status()
+{
+    pthread_mutex_lock(&mutex);
+    int status = lockStatus;
+    pthread_mutex_unlock(&mutex);
+    return status;
+}
+
+
