@@ -28,16 +28,19 @@ public:
     client_lock_t();
 
     /// Aquires the lock. Pauses thread until lock is released.
-    void acquired();
+    int acquire();
 
     /// Releases the lock. Wakes up other thread waiting to aquire this lock.
-    void revoked();
+    void release();
+
+    /// Releases the lock. Wakes up other thread waiting to aquire this lock.
+    void released();
 
     /// Aquires the lock. Pauses thread until lock is released.
-    void acquiring();
+    void locked();
 
     /// Releases the lock. Wakes up other thread waiting to aquire this lock.
-    void releasing();
+    void unlocked();
 
     /// Returns the current status of the lock.
     int status();
@@ -109,7 +112,14 @@ class lock_client_cache : public lock_client {
 
 
   std::map<lock_protocol::lockid_t, client_lock_t> localLocks;
-  std::list<lock_protocol::lockid_t> locksToRelease;
+
+  std::list<lock_protocol::lockid_t> revokeList;
+  pthread_cond_t okToRevoke;
+  pthread_mutex_t mutexRevokeList;
+
+  std::map<lock_protocol::lockid_t,bool> retryMap;
+  pthread_cond_t okToRetry;
+  pthread_mutex_t mutexRetryMap;
 
  public:
 
@@ -119,8 +129,8 @@ class lock_client_cache : public lock_client {
   lock_protocol::status acquire(lock_protocol::lockid_t);
   virtual lock_protocol::status release(lock_protocol::lockid_t);
   void releaser();
-  virtual rlock_protocol::status retry(lock_protocol::lockid_t lid, int &);
-  virtual rlock_protocol::status revoke(lock_protocol::lockid_t lid, int &);
+  rlock_protocol::status retry(lock_protocol::lockid_t lid, int &);
+  rlock_protocol::status revoke(lock_protocol::lockid_t lid, int &);
 };
 #endif
 
