@@ -1,4 +1,4 @@
-LAB=5
+LAB=6
 SOL=0
 RPC=./rpc
 LAB2GE=$(shell expr $(LAB) \>\= 2)
@@ -32,7 +32,7 @@ LDLIBS += $(shell test -f `gcc -print-file-name=libdl.so` && echo -ldl)
 CC = g++
 CXX = g++
 
-lab:  lab5
+lab:  lab6
 lab1: rpc/rpctest lock_server lock_tester lock_demo
 lab2: yfs_client extent_server
 lab3: yfs_client extent_server
@@ -157,9 +157,9 @@ l5-sol:
 
 
 l6:
-	./mklab.pl 6 0 l6 GNUmakefile test-lab-4-a.pl $(rpclib) $(yfs_client)\
-	 $(extent_server) start.sh stop.sh test-lab-2.pl mkfs.sh\
-	 $(hfiles2) $(test-lab-4-b) $(test-lab-4-c)
+	./mklab.pl 6 0 l6 GNUmakefile test-lab-4-a.pl $(rpclib) $(yfs_client) $(rpctest) $(lock_server)\
+	 $(extent_server) $(lock_server) start.sh stop.sh test-lab-2.pl mkfs.sh\
+	 $(hfiles1) $(hfiles2) $(hfiles3) $(lock_tester) $(test-lab-4-b) $(test-lab-4-c)
 
 l6-sol:
 	./mklab.pl 6 6 l6-sol GNUmakefile test-lab-4-a.pl $(yfs_client) $(rpclib) $(rpctest) $(lock_server)\

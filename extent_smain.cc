@@ -9,6 +9,8 @@
 int
 main(int argc, char *argv[])
 {
+  int count = 0;
+
   if(argc != 2){
     fprintf(stderr, "Usage: %s port\n", argv[0]);
     exit(1);
@@ -16,7 +18,12 @@ main(int argc, char *argv[])
 
   setvbuf(stdout, NULL, _IONBF, 0);
 
-  rpcs server(atoi(argv[1]));
+  char *count_env = getenv("RPC_COUNT");
+  if(count_env != NULL){
+    count = atoi(count_env);
+  }
+
+  rpcs server(atoi(argv[1]), count);
   extent_server ls;
 
   server.reg(extent_protocol::get, &ls, &extent_server::get);
