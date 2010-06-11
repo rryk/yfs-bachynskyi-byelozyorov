@@ -11,6 +11,9 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+// rpcc connection cache
+std::map<std::string, rpcc*> rpccCache;
+
 // Revoke and retry request queues
 std::queue<std::pair<std::string, lock_protocol::lockid_t> > revokeRequests;
 std::queue<std::pair<std::string, lock_protocol::lockid_t> > retryRequests;
@@ -155,18 +158,29 @@ lock_server_cache::revoker()
         revokeRequests.pop();
 
         pthread_mutex_unlock(&revokeMutex);
+        
+        // get or create connection to client
+        rpcc* cl;
+        if (rpccCache.find(req.first) == rpccCache.end())
+        {
+            sockaddr_in dstsock;
+            make_sockaddr(req.first.c_str(), &dstsock);
+            cl = new rpcc(dstsock);
 
-        // send revoke request
-        sockaddr_in dstsock;
-        make_sockaddr(req.first.c_str(), &dstsock);
-        rpcc cl(dstsock);
+            if (cl->bind() < 0) {
+                printf("lock_server_cache::revoker(): bind failed\n");
+                return;
+            }
 
-        if (cl.bind() < 0) {
-            printf("lock_server_cache::revoker(): bind failed\n");
-            return;
+            rpccCache.insert(std::make_pair(req.first, cl));
+        }
+        else
+        {
+            cl = rpccCache[req.first];
         }
 
-        if (cl.call(rlock_protocol::revoke, req.second, r) != rlock_protocol::OK)
+        // send revoke request
+        if (cl->call(rlock_protocol::revoke, req.second, r) != rlock_protocol::OK)
         {
             pthread_mutex_lock(&revokeMutex);
             revokeRequests.push(req);
@@ -204,17 +218,28 @@ lock_server_cache::retryer()
 
         pthread_mutex_unlock(&retryMutex);
 
-        // send retry request
-        sockaddr_in dstsock;
-        make_sockaddr(req.first.c_str(), &dstsock);
-        rpcc cl(dstsock);
+        // get or create connection to client
+        rpcc* cl;
+        if (rpccCache.find(req.first) == rpccCache.end())
+        {
+            sockaddr_in dstsock;
+            make_sockaddr(req.first.c_str(), &dstsock);
+            cl = new rpcc(dstsock);
 
-        if (cl.bind() < 0) {
-            printf("lock_server_cache::revoker(): bind failed\n");
-            return;
+            if (cl->bind() < 0) {
+                printf("lock_server_cache::revoker(): bind failed\n");
+                return;
+            }
+
+            rpccCache.insert(std::make_pair(req.first, cl));
+        }
+        else
+        {
+            cl = rpccCache[req.first];
         }
 
-        if (cl.call(rlock_protocol::retry, req.second, r) != rlock_protocol::OK)
+        // send revoke request
+        if (cl->call(rlock_protocol::retry, req.second, r) != rlock_protocol::OK)
         {
             pthread_mutex_lock(&retryMutex);
             retryRequests.push(req);
