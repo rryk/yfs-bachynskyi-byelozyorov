@@ -38,7 +38,7 @@ cache_lock_t::cache_lock_t(int lid)
 lock_protocol::status cache_lock_t::acquire(std::string addr)
 {
         pthread_mutex_lock(&mutex);
-        printf("lock_t_server::acquire(%llu)\n", id);
+            printf("lock_t_server::acquire(%llu)\n", id);
             if (!lockHolder.empty())
             {
                 printf("ToRevoke\n");
@@ -50,15 +50,16 @@ lock_protocol::status cache_lock_t::acquire(std::string addr)
 
                     // add client to the list of interested clients
                     interestedClients.push_back(addr);
+                pthread_mutex_unlock(&mutex);
                     return lock_protocol::RETRY;
             }
             else
             {
                     // store current lock holder
                     lockHolder = addr;
+                pthread_mutex_unlock(&mutex);
                     return lock_protocol::OK;
             }
-	pthread_mutex_unlock(&mutex);
 }
 
 void cache_lock_t::release()
@@ -221,8 +222,10 @@ lock_protocol::status lock_server_cache::acquire(int clt, lock_protocol::lockid_
 	if (locks.find(lid) == locks.end())
 		locks.insert(std::make_pair(lid, cache_lock_t(lid)));
 	pthread_mutex_unlock(&mutex);
-	
+        printf("lock_server_cache::acquire(%d, %llu) Middle\n", clt, lid);
+
     r = locks[lid].acquire(rpc_addr);
+    printf("lock_server_cache::acquire(%d, %llu) End\n", clt, lid);
 
     return r;
 }
@@ -236,8 +239,10 @@ lock_protocol::status lock_server_cache::release(int clt, lock_protocol::lockid_
     if (locks.find(lid) == locks.end())
         return lock_protocol::NOENT;
     pthread_mutex_unlock(&mutex);
-    
+    printf("lock_server_cache::release(%d, %llu) Middle\n", clt, lid);
+
     locks[lid].release();
+    printf("lock_server_cache::release(%d, %llu) End\n", clt, lid);
 
     return lock_protocol::OK;
 }

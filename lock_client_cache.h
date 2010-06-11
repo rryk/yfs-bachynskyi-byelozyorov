@@ -133,7 +133,7 @@ class lock_client_cache : public lock_client {
 
   /// Constructor of lock_client_cache. xdst - string for creating sever socket connection "ip:port"
   lock_client_cache(std::string xdst, class lock_release_user *l = 0);
-  virtual ~lock_client_cache() {};
+  virtual ~lock_client_cache();
 
   /// Acquire lock, locally or from server, if needed
   lock_protocol::status acquire(lock_protocol::lockid_t);

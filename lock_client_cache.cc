@@ -56,6 +56,15 @@ lock_client_cache::lock_client_cache(std::string xdst,
   pthread_mutex_init(&mutexRevokeList, NULL);
 }
 
+lock_client_cache::~lock_client_cache()
+{
+    pthread_mutex_lock(&mutexRevokeList);
+    for (std::map<lock_protocol::lockid_t,client_lock_t>::iterator it=localLocks.begin();it!=localLocks.end();it++)
+        revokeList.push_back((*it).first);
+    pthread_mutex_unlock(&mutexRevokeList);
+    pthread_cond_signal(&okToRevoke);
+}
+
 
 void
 lock_client_cache::releaser()
