@@ -81,6 +81,9 @@ lock_client_cache::releaser()
 
             // Get id for revoking from revokeList and delete it there
             lock_protocol::lockid_t lid=revokeList.front();
+
+            printf("lock_client_cache::releaser\n");
+
         // Unlock revokeList
         pthread_mutex_unlock(&mutexRevokeList);
 
@@ -176,8 +179,9 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
         for(std::list<lock_protocol::lockid_t>::iterator it=revokeList.begin();it!=revokeList.end();it++)
             if (*it==lid)
             {
-                revokeList.erase(it);
+                it=revokeList.erase(it);
                 toRevoke=true;
+                break;
             }
     pthread_mutex_unlock(&mutexRevokeList);
 
