@@ -47,13 +47,15 @@ cache_lock_t::cache_lock_t(int lid)
 
 lock_protocol::status cache_lock_t::acquire(std::string addr)
 {
-	printf("lock_t_server::acquire(%llu)\n", id);
+    printf("lock_t_server::acquire(%s, %llu) ", addr.c_str(), id);
 
     pthread_mutex_lock(&mutex);
     lock_protocol::status res;
 
     if (!lockHolder.empty())
     {
+        printf("rejected\n");
+
         // add revoke request to the queue and wake up the revoker thread
         pthread_mutex_lock(&revokeMutex);
         if (!revokeRequested[id])
@@ -67,12 +69,24 @@ lock_protocol::status cache_lock_t::acquire(std::string addr)
         // add client to the list of interested clients
         interestedClients.push_back(addr);
         res = lock_protocol::RETRY;
+
     }
     else
     {
+        printf("granted\n");
+
         // store current lock holder
         lockHolder = addr;
         res = lock_protocol::OK;
+
+        if (!interestedClients.empty())
+        {
+            pthread_mutex_lock(&revokeMutex);
+            revokeRequested[id] = true;
+            revokeRequests.push(std::make_pair(lockHolder, id));
+            pthread_mutex_unlock(&revokeMutex);
+            pthread_cond_signal(&needToRevoke);
+        }
     }
 
     pthread_mutex_unlock(&mutex);
@@ -93,15 +107,13 @@ void cache_lock_t::release()
 
     // notify all interested clients that the lock is available
     pthread_mutex_lock(&retryMutex);
-    for (std::list<std::string>::const_iterator it = interestedClients.begin(); it != interestedClients.end(); it++)
-        retryRequests.push(std::make_pair(*it, id)); // add repeat request to the queue
+    std::string client = interestedClients.front();
+    interestedClients.pop_front();
+    retryRequests.push(std::make_pair(client, id)); // add repeat request to the queue
     pthread_mutex_unlock(&retryMutex);
 
     // wake up the retryer thread
     pthread_cond_signal(&needToRetry);
-
-    // erase list of interested clients (one of them will acquire the lock and others will register again)
-    interestedClients.clear();
 
     pthread_mutex_unlock(&mutex);
 }
@@ -193,6 +205,7 @@ lock_server_cache::revoker()
         }
 
         // send revoke request
+        printf("lock_server_cache::send_revoke(%s, %llu)\n", req.first.c_str(), req.second);
         if (cl->call(rlock_protocol::revoke, req.second, r) != rlock_protocol::OK)
         {
             pthread_mutex_lock(&revokeMutex);
@@ -215,7 +228,6 @@ lock_server_cache::retryer()
 
     while (true)
     {
-        printf("lock_server_cache::retryer\n");
         pthread_mutex_lock(&retryMutex);
 
         // wait for new revoke requests
@@ -252,6 +264,7 @@ lock_server_cache::retryer()
         }
 
         // send revoke request
+        printf("lock_server_cache::send_retry(%s, %llu)\n", req.first.c_str(), req.second);
         if (cl->call(rlock_protocol::retry, req.second, r) != rlock_protocol::OK)
         {
             pthread_mutex_lock(&retryMutex);
@@ -278,17 +291,15 @@ lock_protocol::status lock_server_cache::stat(int clt, lock_protocol::lockid_t l
 
 lock_protocol::status lock_server_cache::acquire(int clt, lock_protocol::lockid_t lid, std::string rpc_addr, lock_protocol::status & r)
 {
-    printf("lock_server_cache::acquire(%d, %llu)\n", clt, lid);
+    printf("lock_server_cache::acquire(%d, %s, %llu)\n", clt, rpc_addr.c_str(), lid);
 
     // insert new lock record on first access (for unknown-before lock id)
     pthread_mutex_lock(&mutex);
     if (locks.find(lid) == locks.end())
         locks.insert(std::make_pair(lid, cache_lock_t(lid)));
     pthread_mutex_unlock(&mutex);
-	printf("lock_server_cache::acquire(%d, %llu) Middle\n", clt, lid);
 
     r = locks[lid].acquire(rpc_addr);
-    printf("lock_server_cache::acquire(%d, %llu) End\n", clt, lid);
 
     return r;
 }
@@ -304,7 +315,6 @@ lock_protocol::status lock_server_cache::release(int clt, lock_protocol::lockid_
     pthread_mutex_unlock(&mutex);
 
     locks[lid].release();
-    printf("lock_server_cache::release(%d, %llu) End\n", clt, lid);
 
     return lock_protocol::OK;
 }
