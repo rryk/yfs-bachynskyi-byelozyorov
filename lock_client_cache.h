@@ -23,26 +23,28 @@ class client_lock_t {
 public:
   enum lock_status_t { NONE, FREE, LOCKED, ACQUIRING, RELEASING };
 
-    /// Constructor. Initalizes internal structures and sets "unlocked" state
+    /// Constructor. Initalizes internal structures and sets "NONE" state
     /// for the lock.
     client_lock_t();
 
-    /// Aquires the lock. Pauses thread until lock is released.
+    /// Aquires the lock. Pauses thread until lock is FREE. If there is no lock on client "NONE", sets lock to ACQUIRING
+    /// and returns NONE. Could return NONE or FREE, depends on previous state
     int acquire();
 
-    /// Releases the lock. Wakes up other thread waiting to aquire this lock.
+    /// Releases the lock. Setting lock to RELEASING status
     void release();
 
-    /// Releases the lock. Wakes up other thread waiting to aquire this lock.
+    /// Setting lock to NONE status after RELEASING. Wakes up other thread waiting to aquire this lock, that has to
+    /// reacquire it from server.
     void released();
 
-    /// Aquires the lock. Pauses thread until lock is released.
+    /// Setting lock to LOCKED after ACQUIRING
     void locked();
 
-    /// Releases the lock. Wakes up other thread waiting to aquire this lock.
+    /// Releases the lock locally. Set it to FREE. Wakes up other thread waiting to aquire this lock.
     void unlocked();
 
-    /// Returns the current status of the lock.
+    /// Returns the current status of the lock. Never used :D
     int status();
 
 private:
@@ -108,30 +110,44 @@ class lock_client_cache : public lock_client {
   class lock_release_user *lu;
   int rlock_port;
   std::string hostname;
+  /// id for creation of sockaddr obj, "ip:port"
   std::string id;
 
-
+  /// Map for local saving locks
   std::map<lock_protocol::lockid_t, client_lock_t> localLocks;
 
+  /// List of locks, that should be revoked it's mutex and condition variable for revoker thread
   std::list<lock_protocol::lockid_t> revokeList;
   pthread_cond_t okToRevoke;
   pthread_mutex_t mutexRevokeList;
 
+  /// Map for saving flag, whether client received rpc for retry. Lock and condition variable for retrying to acquire lock from server
   std::map<lock_protocol::lockid_t,bool> retryMap;
   pthread_cond_t okToRetry;
   pthread_mutex_t mutexRetryMap;
 
  public:
 
+  /// Last used port on this computer
   static int last_port;
+
+  /// Constructor of lock_client_cache. xdst - string for creating sever socket connection "ip:port"
   lock_client_cache(std::string xdst, class lock_release_user *l = 0);
   virtual ~lock_client_cache() {};
+
+  /// Acquire lock, locally or from server, if needed
   lock_protocol::status acquire(lock_protocol::lockid_t);
+
+  /// Release lock, locally or to server if needed, signal to other threads waiting for that lock
   virtual lock_protocol::status release(lock_protocol::lockid_t);
+
+  /// Revoke locks, which are FREE
   void releaser();
+
+  /// RPC, that signals for waiting thread to retry to request lock from server
   rlock_protocol::status retry(lock_protocol::lockid_t lid, int &);
+
+  /// RPC that signals, that lock should be revoked
   rlock_protocol::status revoke(lock_protocol::lockid_t lid, int &);
 };
 #endif
-
-
