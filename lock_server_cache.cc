@@ -14,6 +14,9 @@
 // rpcc connection cache
 std::map<std::string, rpcc*> rpccCache;
 
+// Revoke requested
+std::map<lock_protocol::lockid_t, bool> revokeRequested;
+
 // Revoke and retry request queues
 std::queue<std::pair<std::string, lock_protocol::lockid_t> > revokeRequests;
 std::queue<std::pair<std::string, lock_protocol::lockid_t> > retryRequests;
@@ -37,6 +40,9 @@ cache_lock_t::cache_lock_t(int lid)
 
     // initialize interested clients list
     interestedClients.clear();
+
+    // set default value for revoke requested status
+    revokeRequested[id] = false;
 }
 
 lock_protocol::status cache_lock_t::acquire(std::string addr)
@@ -50,7 +56,11 @@ lock_protocol::status cache_lock_t::acquire(std::string addr)
     {
         // add revoke request to the queue and wake up the revoker thread
         pthread_mutex_lock(&revokeMutex);
-        revokeRequests.push(std::make_pair(lockHolder, id));
+        if (!revokeRequested[id])
+        {
+            revokeRequested[id] = true;
+            revokeRequests.push(std::make_pair(lockHolder, id));
+        }
         pthread_mutex_unlock(&revokeMutex);
         pthread_cond_signal(&needToRevoke);
 
@@ -77,6 +87,9 @@ void cache_lock_t::release()
 
     // clear lock holder
     lockHolder = "";
+
+    // clear revoke requested status
+    revokeRequested[id] = false;
 
     // notify all interested clients that the lock is available
     pthread_mutex_lock(&retryMutex);
