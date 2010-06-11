@@ -133,6 +133,8 @@ lock_server_cache::revoker()
 
 	while (true)
 	{
+            printf("lock_server_cache::retry\n");
+
             pthread_mutex_lock(&revokeMutex);
                 // wait for new revoke requests
 		while (revokeRequests.empty())
@@ -141,6 +143,7 @@ lock_server_cache::revoker()
 		// get request details
 		std::pair<std::string, lock_protocol::lockid_t> req = 
 			revokeRequests.front();
+                printf("lock_server_cache::revoke(%s, %llu)\n", req.first.c_str(), req.second);
 
                 // remove processed request
                 revokeRequests.pop();
@@ -172,6 +175,7 @@ lock_server_cache::retryer()
 
     while (true)
     {
+        printf("lock_server_cache::retryer\n");
         pthread_mutex_lock(&retryMutex);
             // wait for new revoke requests
             while (retryRequests.empty())
@@ -180,6 +184,7 @@ lock_server_cache::retryer()
             // get request details
             std::pair<std::string, lock_protocol::lockid_t> req =
                     retryRequests.front();
+printf("lock_server_cache::retry(%s, %llu)\n", req.first.c_str(), req.second);
 
             // remove processed request
             retryRequests.pop();
@@ -215,14 +220,13 @@ lock_protocol::status lock_server_cache::stat(int clt, lock_protocol::lockid_t l
 
 lock_protocol::status lock_server_cache::acquire(int clt, lock_protocol::lockid_t lid, std::string rpc_addr, lock_protocol::status & r)
 {
-	printf("lock_server_cache::acquire(%d, %llu)\n", clt, lid);
+    printf("lock_server_cache::acquire(%d, %llu)\n", clt, lid);
 
     // insert new lock record on first access (for unknown-before lock id)
 	pthread_mutex_lock(&mutex);
 	if (locks.find(lid) == locks.end())
 		locks.insert(std::make_pair(lid, cache_lock_t(lid)));
 	pthread_mutex_unlock(&mutex);
-        printf("lock_server_cache::acquire(%d, %llu) Middle\n", clt, lid);
 
     r = locks[lid].acquire(rpc_addr);
     printf("lock_server_cache::acquire(%d, %llu) End\n", clt, lid);
@@ -239,7 +243,6 @@ lock_protocol::status lock_server_cache::release(int clt, lock_protocol::lockid_
     if (locks.find(lid) == locks.end())
         return lock_protocol::NOENT;
     pthread_mutex_unlock(&mutex);
-    printf("lock_server_cache::release(%d, %llu) Middle\n", clt, lid);
 
     locks[lid].release();
     printf("lock_server_cache::release(%d, %llu) End\n", clt, lid);

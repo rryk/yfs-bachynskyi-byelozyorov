@@ -66,6 +66,12 @@ lock_client_cache::~lock_client_cache()
 }
 
 
+lock_client_cache::~lock_client_cache()
+{
+
+}
+
+
 void
 lock_client_cache::releaser()
 {
