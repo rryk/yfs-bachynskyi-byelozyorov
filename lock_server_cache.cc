@@ -149,7 +149,7 @@ lock_server_cache::revoker()
 
         // get request details
         std::pair<std::string, lock_protocol::lockid_t> req =
-        revokeRequests.front();
+            revokeRequests.front();
 
         // remove processed request
         revokeRequests.pop();
@@ -160,7 +160,13 @@ lock_server_cache::revoker()
         sockaddr_in dstsock;
         make_sockaddr(req.first.c_str(), &dstsock);
         rpcc cl(dstsock);
-        if (cl.call(rlock_protocol::revoke, req.second, r)!=lock_protocol::OK)
+
+        if (cl.bind() < 0) {
+            printf("lock_server_cache::revoker(): bind failed\n");
+            return;
+        }
+
+        if (cl.call(rlock_protocol::revoke, req.second, r) != rlock_protocol::OK)
         {
             pthread_mutex_lock(&revokeMutex);
             revokeRequests.push(req);
@@ -202,7 +208,13 @@ lock_server_cache::retryer()
         sockaddr_in dstsock;
         make_sockaddr(req.first.c_str(), &dstsock);
         rpcc cl(dstsock);
-        if (cl.call(rlock_protocol::retry, req.second, r)!=lock_protocol::OK)
+
+        if (cl.bind() < 0) {
+            printf("lock_server_cache::revoker(): bind failed\n");
+            return;
+        }
+
+        if (cl.call(rlock_protocol::retry, req.second, r) != rlock_protocol::OK)
         {
             pthread_mutex_lock(&retryMutex);
             retryRequests.push(req);
