@@ -26,81 +26,70 @@ pthread_cond_t needToRetry;
 // Implementation of lock_server_cache class
 
 cache_lock_t::cache_lock_t(int lid)
-    : id(lid)
-	, lockHolder("")
+    : id(lid), lockHolder("")
 {
-	// initialize condition var
     pthread_cond_init(&okToLock, NULL);
-    
-    // initialize mutex
     pthread_mutex_init(&mutex, NULL);
 	
-	// initialize interested clients list
-	interestedClients.clear();
+    // initialize interested clients list
+    interestedClients.clear();
 }
 
 lock_protocol::status cache_lock_t::acquire(std::string addr)
 {
-	pthread_mutex_lock(&mutex);
-	
-	if (!lockHolder.empty())
-	{
-		// add revoke request to the queue and wake up the revoker thread
-		pthread_mutex_lock(&revokeMutex);
-		revokeRequests.push(std::make_pair(addr, id));
-		pthread_mutex_unlock(&revokeMutex);
-		pthread_cond_signal(&needToRevoke);
-		
-		// add client to the list of interested clients
-		interestedClients.push_back(addr);
-		
-		return lock_protocol::RETRY;
-	}
-	else
-	{
-		// store current lock holder
-		lockHolder = addr;
-		
-		return lock_protocol::OK;
-	}
-	
+        pthread_mutex_lock(&mutex);
+        printf("lock_t_server::acquire(%llu)\n", id);
+            if (!lockHolder.empty())
+            {
+                printf("ToRevoke\n");
+                    // add revoke request to the queue and wake up the revoker thread
+                    pthread_mutex_lock(&revokeMutex);
+                        revokeRequests.push(std::make_pair(lockHolder, id));
+                    pthread_mutex_unlock(&revokeMutex);
+                    pthread_cond_signal(&needToRevoke);
+
+                    // add client to the list of interested clients
+                    interestedClients.push_back(addr);
+                    return lock_protocol::RETRY;
+            }
+            else
+            {
+                    // store current lock holder
+                    lockHolder = addr;
+                    return lock_protocol::OK;
+            }
 	pthread_mutex_unlock(&mutex);
 }
 
 void cache_lock_t::release()
 {
 	pthread_mutex_lock(&mutex);
-	
-	assert(!lockHolder.empty());
-	
-	// clear lock holder
-	lockHolder = "";
-	
-	// notify all interested clients that the lock is available
-	pthread_mutex_lock(&retryMutex);
-	for (std::list<std::string>::const_iterator it = interestedClients.begin(); it != interestedClients.end(); it++)
-		revokeRequests.push(std::make_pair(*it, id)); // add repeat request to the queue
-	pthread_mutex_unlock(&retryMutex);
-	
-	// wake up the retryer thread
-	pthread_cond_signal(&needToRetry);
-	
-	// erase list of interested clients (one of them will acquire the lock and others will register again)
-	interestedClients.clear();
-	
+        printf("lock_t_server::release(%llu)\n", id);
+            assert(!lockHolder.empty());
+
+            // clear lock holder
+            lockHolder = "";
+
+            // notify all interested clients that the lock is available
+            pthread_mutex_lock(&retryMutex);
+            for (std::list<std::string>::const_iterator it = interestedClients.begin(); it != interestedClients.end(); it++)
+                    retryRequests.push(std::make_pair(*it, id)); // add repeat request to the queue
+            pthread_mutex_unlock(&retryMutex);
+
+            // wake up the retryer thread
+            pthread_cond_signal(&needToRetry);
+
+            // erase list of interested clients (one of them will acquire the lock and others will register again)
+            interestedClients.clear();
 	pthread_mutex_unlock(&mutex);
 }
 
 bool cache_lock_t::isLocked()
 {
-	pthread_mutex_lock(&mutex);
-	
-	// copy lock status into a local var
-    bool isLocked = !lockHolder.empty();
-
+    // make temporary variable and return it
+    pthread_mutex_lock(&mutex);
+        bool isLocked = !lockHolder.empty();
     pthread_mutex_unlock(&mutex);
-
-    // return lock status
     return isLocked;
 }
 
@@ -134,74 +123,78 @@ lock_server_cache::lock_server_cache()
 void
 lock_server_cache::revoker()
 {
-	// initialize condition var
+    // initialize condition var and mutex
     pthread_cond_init(&needToRevoke, NULL);
-    
-    // initialize mutex
-	pthread_mutex_init(&revokeMutex, NULL);
-	pthread_mutex_lock(&revokeMutex);
-	
+    pthread_mutex_init(&revokeMutex, NULL);
+
 	// temp variable to store RPC result
 	int r;
 
 	while (true)
 	{
-		// wait for new revoke requests
+            pthread_mutex_lock(&revokeMutex);
+                // wait for new revoke requests
 		while (revokeRequests.empty())
 			pthread_cond_wait(&needToRevoke, &revokeMutex);
 			
 		// get request details
 		std::pair<std::string, lock_protocol::lockid_t> req = 
 			revokeRequests.front();
-			
+
+                // remove processed request
+                revokeRequests.pop();
+            pthread_mutex_unlock(&revokeMutex);
+
 		// send revoke request
 		sockaddr_in dstsock;
 		make_sockaddr(req.first.c_str(), &dstsock);
 		rpcc cl(dstsock);
-		cl.call(rlock_protocol::revoke, req.second, r);
-		
-		// remove processed request
-		revokeRequests.pop();
+                if (cl.call(rlock_protocol::revoke, req.second, r)!=lock_protocol::OK)
+                {
+                    pthread_mutex_lock(&revokeMutex);
+                        revokeRequests.push(req);
+                    pthread_mutex_unlock(&revokeMutex);
+                }
 	}
-	
-	pthread_mutex_unlock(&revokeMutex);
 }
 
 
 void
 lock_server_cache::retryer()
 {
-	// initialize condition var
+    // initialize condition var and mutex
     pthread_cond_init(&needToRetry, NULL);
-    
-    // initialize mutex
-	pthread_mutex_init(&retryMutex, NULL);
-	pthread_mutex_lock(&retryMutex);
+    pthread_mutex_init(&retryMutex, NULL);
 	
-	// temp variable to store RPC result
-	int r;
+    // temp variable to store RPC result
+    int r;
 
-	while (true)
-	{
-		// wait for new revoke requests
-		while (retryRequests.empty())
-			pthread_cond_wait(&needToRetry, &retryMutex);
-			
-		// get request details
-		std::pair<std::string, lock_protocol::lockid_t> req = 
-			retryRequests.front();
-			
-		// send retry request
-		sockaddr_in dstsock;
-		make_sockaddr(req.first.c_str(), &dstsock);
-		rpcc cl(dstsock);
-		cl.call(rlock_protocol::retry, req.second, r);
-		
-		// remove processed request
-		retryRequests.pop();
-	}
-	
-	pthread_mutex_unlock(&retryMutex);
+    while (true)
+    {
+        pthread_mutex_lock(&retryMutex);
+            // wait for new revoke requests
+            while (retryRequests.empty())
+                    pthread_cond_wait(&needToRetry, &retryMutex);
+
+            // get request details
+            std::pair<std::string, lock_protocol::lockid_t> req =
+                    retryRequests.front();
+
+            // remove processed request
+            retryRequests.pop();
+        pthread_mutex_unlock(&retryMutex);
+
+            // send retry request
+            sockaddr_in dstsock;
+            make_sockaddr(req.first.c_str(), &dstsock);
+            rpcc cl(dstsock);
+            if (cl.call(rlock_protocol::retry, req.second, r)!=lock_protocol::OK)
+            {
+                pthread_mutex_lock(&retryMutex);
+                    retryRequests.push(req);
+                pthread_mutex_unlock(&retryMutex);
+            }
+    }
 }
 
 lock_protocol::status lock_server_cache::stat(int clt, lock_protocol::lockid_t lid, int & r)
@@ -231,18 +224,18 @@ lock_protocol::status lock_server_cache::acquire(int clt, lock_protocol::lockid_
 	
     r = locks[lid].acquire(rpc_addr);
 
-    return lock_protocol::OK;
+    return r;
 }
 
 lock_protocol::status lock_server_cache::release(int clt, lock_protocol::lockid_t lid, int &)
 {
-	printf("lock_server_cache::release(%d, %llu)\n", clt, lid);
+    printf("lock_server_cache::release(%d, %llu)\n", clt, lid);
 
-	// insert new lock record on first access (for unknown-before lock id)
-	pthread_mutex_lock(&mutex);
-	if (locks.find(lid) == locks.end())
-		locks.insert(std::make_pair(lid, cache_lock_t(lid)));
-	pthread_mutex_unlock(&mutex);
+    // insert new lock record on first access (for unknown-before lock id)
+    pthread_mutex_lock(&mutex);
+    if (locks.find(lid) == locks.end())
+        return lock_protocol::NOENT;
+    pthread_mutex_unlock(&mutex);
     
     locks[lid].release();
 

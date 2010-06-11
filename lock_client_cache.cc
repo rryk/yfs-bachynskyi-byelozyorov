@@ -114,6 +114,7 @@ lock_client_cache::releaser()
 lock_protocol::status
 lock_client_cache::acquire(lock_protocol::lockid_t lid)
 {
+    printf("lock_client_cache::acquire(%llu)\n", lid);
     // If lock was FREE, we can simply use it
     if(localLocks[lid].acquire()==client_lock_t::FREE)
         return lock_protocol::OK;
@@ -157,6 +158,7 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
 lock_protocol::status
 lock_client_cache::release(lock_protocol::lockid_t lid)
 {
+    printf("lock_client_cache::release(%llu)\n", lid);
     lock_protocol::status rs;
     bool toRevoke=false;
 
@@ -213,6 +215,8 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
 // RPC Procedures
 rlock_protocol::status lock_client_cache::retry(lock_protocol::lockid_t lid, int &)
 {
+    printf("lock_client_cache::retry(%llu)\n", lid);
+
     // Set retry map value for given lock to true and signal toRetry
     pthread_mutex_lock(&mutexRetryMap);
         retryMap[lid]=true;
@@ -223,6 +227,8 @@ rlock_protocol::status lock_client_cache::retry(lock_protocol::lockid_t lid, int
 
 rlock_protocol::status lock_client_cache::revoke(lock_protocol::lockid_t lid, int &)
 {
+    printf("lock_client_cache::revoke(%llu)\n", lid);
+
     // Add given lock to revokeList and signal revoker
     pthread_mutex_lock(&mutexRevokeList);
         revokeList.push_back(lid);
