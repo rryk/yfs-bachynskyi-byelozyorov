@@ -65,13 +65,6 @@ lock_client_cache::~lock_client_cache()
     pthread_cond_signal(&okToRevoke);
 }
 
-
-lock_client_cache::~lock_client_cache()
-{
-
-}
-
-
 void
 lock_client_cache::releaser()
 {
