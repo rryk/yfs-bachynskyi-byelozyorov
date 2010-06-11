@@ -58,11 +58,10 @@ lock_client_cache::lock_client_cache(std::string xdst,
 
 lock_client_cache::~lock_client_cache()
 {
-    pthread_mutex_lock(&mutexRevokeList);
+    int r;
     for (std::map<lock_protocol::lockid_t,client_lock_t>::iterator it=localLocks.begin();it!=localLocks.end();it++)
-        revokeList.push_back((*it).first);
-    pthread_mutex_unlock(&mutexRevokeList);
-    pthread_cond_signal(&okToRevoke);
+        if ((*it).second.status()==client_lock_t::FREE)
+            cl->call(lock_protocol::release, cl->id(), (*it).first, r);
 }
 
 void
@@ -81,27 +80,29 @@ lock_client_cache::releaser()
 
             // Get id for revoking from revokeList and delete it there
             lock_protocol::lockid_t lid=revokeList.front();
-
+            revokeList.pop_front();
         // Unlock revokeList
         pthread_mutex_unlock(&mutexRevokeList);
 
+        pthread_mutex_lock(&mutexRevokeListByOwner);
             // Acquire lock, that should be revoked locally it should be FREE or NONE
-            int acqRes=localLocks[lid].acquire();
-            assert(acqRes==client_lock_t::FREE || acqRes==client_lock_t::NONE);
+            int acqRes=localLocks[lid].release();
+
+            // If status is NONE, lock is already released to server by other thread. We just change its localState to NONE
+            // and signal to other thread, that needs it
+            if (acqRes==client_lock_t::LOCKED || acqRes==client_lock_t::ACQUIRING)
+                revokeListByOwner.push_back(lid);
+        pthread_mutex_unlock(&mutexRevokeListByOwner);
 
             // If it is FREE, we release it on server
             if (acqRes==client_lock_t::FREE)
             {
-                localLocks[lid].release();
                 lock_protocol::status rs=cl->call(lock_protocol::release, cl->id(), lid, r);
 
                 // If release on server succeds, we change status of lock to NONE
                 if (rs==lock_protocol::OK)
                 {
                     localLocks[lid].released();
-                    pthread_mutex_lock(&mutexRevokeList);
-                        revokeList.pop_front();
-                    pthread_mutex_unlock(&mutexRevokeList);
                 }
 
                 // Else we add our lockID back to revokeList, and Unlock lock locally, to be used by other thread, which needs it
@@ -109,13 +110,11 @@ lock_client_cache::releaser()
                 else
                 {
                         localLocks[lid].unlocked();
+                        pthread_mutex_lock(&mutexRevokeList);
+                            revokeList.push_back(lid);
+                        pthread_mutex_unlock(&mutexRevokeList);
                 }
             }
-
-            // If status is NONE, lock is already released to server by other thread. We just change its localState to NONE
-            // and signal to other thread, that needs it
-            else
-                localLocks[lid].released();
     }
 }
 
@@ -173,23 +172,20 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
 
     // We scan toRevoke list, whether we should release lock locally, or remotely. If we found such value we remove it from list
     // and set flag, that we should revoke it
-    pthread_mutex_lock(&mutexRevokeList);
-        for(std::list<lock_protocol::lockid_t>::iterator it=revokeList.begin();it!=revokeList.end();it++)
+    pthread_mutex_lock(&mutexRevokeListByOwner);
+        for(std::list<lock_protocol::lockid_t>::iterator it=revokeListByOwner.begin();it!=revokeListByOwner.end();it++)
             if (*it==lid)
             {
-                it=revokeList.erase(it);
+                it=revokeListByOwner.erase(it);
                 toRevoke=true;
                 break;
             }
-    pthread_mutex_unlock(&mutexRevokeList);
+    pthread_mutex_unlock(&mutexRevokeListByOwner);
 
     // We try to revoke it remotely
     if(toRevoke)
     {
         int r;
-
-        // Set value of local lock to releasing
-        localLocks[lid].release();
 
         // Call release to server
         rs=cl->call(lock_protocol::release, cl->id(), lid, r);
@@ -285,13 +281,15 @@ int client_lock_t::acquire()
     return result;
 }
 
-void client_lock_t::release()
+int client_lock_t::release()
 {
     // Just set lock status to RELEASING. It is used always after LOCKED
     pthread_mutex_lock(&mutex);
-    assert(lockStatus==LOCKED);
-    lockStatus=RELEASING;
+    int r=lockStatus;
+    if (lockStatus==FREE)
+        lockStatus=RELEASING;
     pthread_mutex_unlock(&mutex);
+    return r;
 }
 
 void client_lock_t::released()

@@ -32,7 +32,7 @@ public:
     int acquire();
 
     /// Releases the lock. Setting lock to RELEASING status
-    void release();
+    int release();
 
     /// Setting lock to NONE status after RELEASING. Wakes up other thread waiting to aquire this lock, that has to
     /// reacquire it from server.
@@ -120,6 +120,10 @@ class lock_client_cache : public lock_client {
   std::list<lock_protocol::lockid_t> revokeList;
   pthread_cond_t okToRevoke;
   pthread_mutex_t mutexRevokeList;
+
+  /// List of locks, that should be revoked by owner, it's mutex
+  std::list<lock_protocol::lockid_t> revokeListByOwner;
+  pthread_mutex_t mutexRevokeListByOwner;
 
   /// Map for saving flag, whether client received rpc for retry. Lock and condition variable for retrying to acquire lock from server
   std::map<lock_protocol::lockid_t,bool> retryMap;
