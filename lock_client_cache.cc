@@ -37,6 +37,13 @@ lock_client_cache::lock_client_cache(std::string xdst,
   id = host.str();
   last_port = rlock_port;
 
+  // initialize condition vars and mutexes
+  pthread_cond_init(&okToRetry, NULL);
+  pthread_cond_init(&okToRevoke, NULL);
+  pthread_mutex_init(&mutexRetryMap, NULL);
+  pthread_mutex_init(&mutexRevokeList, NULL);
+  pthread_mutex_init(&mutexRevokeListByOwner, NULL);
+
   // Creating new rpc server on port rlock_port
   rpcs *rlsrpc = new rpcs(rlock_port);
 
@@ -49,11 +56,6 @@ lock_client_cache::lock_client_cache(std::string xdst,
   int r = pthread_create(&th, NULL, &releasethread, (void *) this);
   assert (r == 0);
 
-  // initialize condition vars and mutexes
-  pthread_cond_init(&okToRetry, NULL);
-  pthread_cond_init(&okToRevoke, NULL);
-  pthread_mutex_init(&mutexRetryMap, NULL);
-  pthread_mutex_init(&mutexRevokeList, NULL);
 }
 
 lock_client_cache::~lock_client_cache()
