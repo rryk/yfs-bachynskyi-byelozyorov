@@ -31,7 +31,7 @@ pthread_cond_t needToRetry;
 
 // Implementation of lock_server_cache class
 
-cache_lock_t::cache_lock_t(int lid)
+cache_lock_t::cache_lock_t(lock_protocol::lockid_t lid)
     : id(lid)
     , lockHolder("")
 {

@@ -29,7 +29,7 @@ public:
 	 *
 	 *  @param lid Lock ID
 	 */
-    cache_lock_t(int lid);
+        cache_lock_t(lock_protocol::lockid_t lid);
     
     /** Aquires the lock. Pauses thread until lock is released.
 	 *
