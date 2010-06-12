@@ -107,13 +107,20 @@ void cache_lock_t::release()
 
     // notify all interested clients that the lock is available
     pthread_mutex_lock(&retryMutex);
-    std::string client = interestedClients.front();
-    interestedClients.pop_front();
-    retryRequests.push(std::make_pair(client, id)); // add repeat request to the queue
-    pthread_mutex_unlock(&retryMutex);
+    if (!interestedClients.empty())
+    {
+        std::string client = interestedClients.front();
+        interestedClients.pop_front();
+        retryRequests.push(std::make_pair(client, id)); // add repeat request to the queue
+        pthread_mutex_unlock(&retryMutex);
 
-    // wake up the retryer thread
-    pthread_cond_signal(&needToRetry);
+        // wake up the retryer thread
+        pthread_cond_signal(&needToRetry);
+    }
+    else
+    {
+        pthread_mutex_unlock(&retryMutex);
+    }
 
     pthread_mutex_unlock(&mutex);
 }
