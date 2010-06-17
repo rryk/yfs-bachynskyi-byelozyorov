@@ -43,6 +43,9 @@ class extent_server {
   // remove an extent
   int remove(extent_protocol::extentid_t id, int &);
 
+  // put extent with attrs to server
+  int put(extent_protocol::extentid_t id, std::string buf, extent_protocol::attr a, int &);
+
 private:
   void reallocateString(std::string &str, unsigned newSize);
 };

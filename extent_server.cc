@@ -193,3 +193,19 @@ void extent_server::reallocateString(std::string &str, unsigned newSize)
     }
     printf(", updatedSize=%u\n", str.size());
 }
+
+int extent_server::put(extent_protocol::extentid_t id, std::string buf, extent_protocol::attr a, int &)
+{
+    printf("extent_server::put(id=%lld, buf=%s)\n", id, buf.c_str());
+
+    // update data in the extent
+    m_dataBlocks[id].data = buf;
+    m_dataBlocks[id].attrs.size = a.size;
+
+    // setting modification times
+    m_dataBlocks[id].attrs.mtime = a.mtime;
+    m_dataBlocks[id].attrs.ctime = a.ctime;
+    m_dataBlocks[id].attrs.atime = a.atime;
+
+    return extent_protocol::OK;
+}

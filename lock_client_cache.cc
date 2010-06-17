@@ -63,7 +63,10 @@ lock_client_cache::~lock_client_cache()
     int r;
     for (std::map<lock_protocol::lockid_t,client_lock_t>::iterator it=localLocks.begin();it!=localLocks.end();it++)
         if ((*it).second.status()==client_lock_t::FREE)
+        {
+            lu->dorelease((*it).first);
             cl->call(lock_protocol::release, cl->id(), (*it).first, r);
+        }
 }
 
 void
@@ -99,6 +102,7 @@ lock_client_cache::releaser()
             // If it is FREE, we release it on server
             if (acqRes==client_lock_t::FREE)
             {
+                lu->dorelease(lid);
                 lock_protocol::status rs=cl->call(lock_protocol::release, cl->id(), lid, r);
 
                 // If release on server succeds, we change status of lock to NONE
@@ -189,6 +193,7 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
     {
         int r;
 
+        lu->dorelease(lid);
         // Call release to server
         rs=cl->call(lock_protocol::release, cl->id(), lid, r);
 
