@@ -24,7 +24,7 @@ extent_protocol::status extent_client::create(extent_protocol::extentid_t id)
     printf("extent_client::create(id=%lld)\n", id);
     pthread_mutex_lock(&localExtents[id].mutex);
 
-    if (localExtents[id].existLocally==true)
+    if (localExtents[id].existLocally)
         {
             pthread_mutex_unlock(&localExtents[id].mutex);
 
@@ -32,17 +32,12 @@ extent_protocol::status extent_client::create(extent_protocol::extentid_t id)
             return extent_protocol::IOERR;
         }
 
-        // create structure for the new extent
-        extent_t e;
-        e.buffer = std::string();
-        e.attrs.mtime = e.attrs.atime = e.attrs.ctime = time(NULL);
-        e.attrs.size = 0;
-        e.isDirty=true;
-        e.existLocally=true;
-        e.isRemote=false;
-
-        // save structure to the extent map
-        localExtents[id] = e;
+        localExtents[id].buffer = std::string();
+        localExtents[id].attrs.mtime = localExtents[id].attrs.atime = localExtents[id].attrs.ctime = time(NULL);
+        localExtents[id].attrs.size = 0;
+        localExtents[id].isDirty=true;
+        localExtents[id].existLocally=true;
+        localExtents[id].isRemote=false;
 
     pthread_mutex_unlock(&localExtents[id].mutex);
 
@@ -179,7 +174,10 @@ extent_protocol::status extent_client::retrieveAll(extent_protocol::extentid_t i
             }
         }
 
-    return retrieve(id, 0, localExtents[id].attrs.size, buf);
+        buf=localExtents[id].buffer;
+    pthread_mutex_unlock(&localExtents[id].mutex);
+
+    return extent_protocol::OK;
 }
 
 extent_protocol::status extent_client::getattr(extent_protocol::extentid_t id, extent_protocol::attr &a)
@@ -299,6 +297,5 @@ extent_protocol::status extent_client::flush(extent_protocol::extentid_t id)
         localExtents[id].isRemoved=false;
         localExtents[id].existLocally=false;
     pthread_mutex_unlock(&localExtents[id].mutex);
-    localExtents.erase(id);
     return extent_protocol::OK;
 }
