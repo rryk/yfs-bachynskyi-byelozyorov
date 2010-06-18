@@ -67,10 +67,14 @@ class marshall {
 		void rawbyte(unsigned char);
 		void rawbytes(const char *, int);
 
-		// Return the current contents (including header) as a string
-		const std::string str() const {
-			std::string tmps = std::string(_buf,_ind);
-			return tmps;
+		// Return the current content (excluding header) as a string
+		std::string get_content() { 
+			return std::string(_buf+RPC_HEADER_SZ,_ind-RPC_HEADER_SZ);
+		}
+
+		// Return the current content (excluding header) as a string
+		std::string str() {
+			return get_content();
 		}
 
 		void pack(int i);
@@ -128,11 +132,28 @@ class unmarshall {
 	public:
 		unmarshall(): _buf(NULL),_sz(0),_ind(0),_ok(false) {}
 		unmarshall(char *b, int sz): _buf(b),_sz(sz),_ind(),_ok(true) {}
+		unmarshall(const std::string &s) : _buf(NULL),_sz(0),_ind(0),_ok(false) 
+		{
+			//take the content which does not exclude a RPC header from a string
+			take_content(s);
+		}
 		~unmarshall() {
 			if (_buf) free(_buf);
 		}
+
 		//take contents from another unmarshall object
 		void take_in(unmarshall &another);
+
+		//take the content which does not exclude a RPC header from a string
+		void take_content(const std::string &s) {
+			_sz = s.size()+RPC_HEADER_SZ;
+			_buf = (char *)realloc(_buf,_sz);
+			assert(_buf);
+			_ind = RPC_HEADER_SZ;
+			memcpy(_buf+_ind, s.data(), s.size());
+			_ok = true;
+		}
+
 		bool ok() { return _ok; }
 		char *cstr() { return _buf;}
 		bool okdone();

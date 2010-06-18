@@ -3,13 +3,14 @@
 //
 
 #include "lock_protocol.h"
-#include "lock_client_cache.h"
+#include "lock_client.h"
 #include "rpc.h"
 #include "jsl_log.h"
 #include <arpa/inet.h>
 #include <vector>
 #include <stdlib.h>
 #include <stdio.h>
+#include "lock_client_cache.h"
 
 // must be >= 2
 int nt = 10; //XXX: lab1's rpc handlers are blocking. Since rpcs uses a thread pool of 10 threads, we cannot test more than 10 blocking rpc.
@@ -143,23 +144,6 @@ test5(void *x)
   return 0;
 }
 
-
-void *
-test6(void *x) 
-{
-  int i = * (int *) x;
-  for (int k = 0; k<100; k++)
-  {
-    lc[i]->acquire(a);
-    check_grant(a);
-    //sleep(1);
-    check_release(a);
-    lc[i]->release(a);
-  }
-  return 0;
-}
-
-
 int
 main(int argc, char *argv[])
 {
@@ -190,7 +174,7 @@ main(int argc, char *argv[])
 
     assert(pthread_mutex_init(&count_mutex, NULL) == 0);
 
-    printf("simple lock client\n");
+    printf("cache lock client\n");
     for (int i = 0; i < nt; i++) lc[i] = new lock_client_cache(dst);
 
     if(!test || test == 1){
@@ -251,22 +235,6 @@ main(int argc, char *argv[])
 	pthread_join(th[i], NULL);
       }
     }
-
-
-    if(!test || test == 6){
-      // test6
-      for (int i = 0; i < nt; i++) {
-	int *a = new int (i);
-	r = pthread_create(&th[i], NULL, test6, (void *) a);
-	assert (r == 0);
-      }
-      for (int i = 0; i < nt; i++) {
-	pthread_join(th[i], NULL);
-      }
-    }
-
-    for (int i=0; i<nt; i++)
-	delete lc[i];
 
     printf ("%s: passed all tests successfully\n", argv[0]);
 

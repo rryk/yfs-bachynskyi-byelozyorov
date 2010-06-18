@@ -99,10 +99,11 @@ void set_rand_seed()
 
 rpcc::rpcc(sockaddr_in d, bool retrans) : 
 	dst_(d), srv_nonce_(0), bind_done_(false), xid_(1), lossytest_(0), 
-	retrans_(retrans), chan_(NULL)
+	retrans_(retrans), reachable_(true), chan_(NULL), destroy_wait_ (false)
 {
 	assert(pthread_mutex_init(&m_, 0) == 0);
 	assert(pthread_mutex_init(&chan_m_, 0) == 0);
+	assert(pthread_cond_init(&destroy_wait_c_, 0) == 0);
 
 	if (retrans) {
 		set_rand_seed();
@@ -157,6 +158,32 @@ rpcc::bind(TO to)
 	return ret;
 };
 
+// Cancel all outstanding calls
+void
+rpcc::cancel(void)
+{
+  ScopedLock ml(&m_);
+  printf("rpcc::cancel: force callers to fail\n");
+  std::map<int,caller*>::iterator iter;
+  for(iter = calls_.begin(); iter != calls_.end(); iter++){
+    caller *ca = iter->second;
+
+    jsl_log(JSL_DBG_2, "rpcc::cancel: force caller to fail\n");
+    {
+      ScopedLock cl(&ca->m);
+      ca->done = true;
+      ca->intret = rpc_const::cancel_failure;
+      assert(pthread_cond_signal(&ca->c) == 0);
+    }
+  }
+
+  while (calls_.size () > 0) {
+    destroy_wait_ = true;
+    assert(pthread_cond_wait(&destroy_wait_c_,&m_) == 0);
+  }
+  printf("rpcc::cancel: done\n");
+}
+
 int
 rpcc::call1(unsigned int proc, marshall &req, unmarshall &rep,
 		TO to)
@@ -170,6 +197,10 @@ rpcc::call1(unsigned int proc, marshall &req, unmarshall &rep,
 				(proc == rpc_const::bind && bind_done_)) {
 			jsl_log(JSL_DBG_1, "rpcc::call1 rpcc has not been bound to dst or binding twice\n");
 			return rpc_const::bind_failure;
+		}
+
+		if (destroy_wait_) {
+		  return rpc_const::cancel_failure;
 		}
 
 		ca.xid = xid_++;
@@ -195,7 +226,8 @@ rpcc::call1(unsigned int proc, marshall &req, unmarshall &rep,
 		if (transmit) {
 			get_refconn(&ch);
 			if (ch) {
-				ch->send(req.cstr(), req.size());
+			        if (reachable_) ch->send(req.cstr(), req.size());
+				else jsl_log(JSL_DBG_1, "not reachable\n");
 				jsl_log(JSL_DBG_2, 
 						"rpcc::call1 %u just sent req proc %x xid %u clt_nonce %d\n", 
 						clt_nonce_, proc, ca.xid, clt_nonce_); 
@@ -216,11 +248,16 @@ rpcc::call1(unsigned int proc, marshall &req, unmarshall &rep,
 		{
 			ScopedLock cal(&ca.m);
 			while (!ca.done) {
-				if (pthread_cond_timedwait(&ca.c, &ca.m, &nextdeadline) == ETIMEDOUT)
+			        jsl_log(JSL_DBG_2, "rpcc:call1: wait\n");
+				if (pthread_cond_timedwait(&ca.c, &ca.m, &nextdeadline) == ETIMEDOUT) {
+				  	jsl_log(JSL_DBG_2, "rpcc::call1: timeout\n");
 					break;
+				}
 			}
-			if (ca.done)
+			if (ca.done) {
+			        jsl_log(JSL_DBG_2, "rpcc::call1: reply received\n");
 				break;
+			}
 		}
 
 		if (retrans_ && (!ch || ch->isdead())) {
@@ -237,12 +274,16 @@ rpcc::call1(unsigned int proc, marshall &req, unmarshall &rep,
 		// packet times out before it's even sent by the channel.  nasty.
 		// but I don't think there's any harm in potentially doing it twice
 		update_xid_rep(ca.xid);
+
+		if (destroy_wait_) {
+		  assert(pthread_cond_signal(&destroy_wait_c_) == 0);
+		}
 	}
 
 	ScopedLock cal(&ca.m);
 
 	jsl_log(JSL_DBG_2, 
-			"rpcc::call1 %u wait over for req proc %x xid %u %s:%d done? %d ret %d \n", 
+			"rpcc::call1 %u call done for req proc %x xid %u %s:%d done? %d ret %d \n", 
 			clt_nonce_, proc, ca.xid, inet_ntoa(dst_.sin_addr),
 			ntohs(dst_.sin_port), ca.done, ca.intret);
 
@@ -340,7 +381,7 @@ compress:
 
 
 rpcs::rpcs(unsigned int p1, int count)
-: port_(p1), counting_(count), curr_counts_(count), lossytest_(0)
+  : port_(p1), counting_(count), curr_counts_(count), lossytest_(0), reachable_ (true)
 {
 	assert(pthread_mutex_init(&procs_m_, 0) == 0);
 	assert(pthread_mutex_init(&count_m_, 0) == 0);
@@ -373,10 +414,15 @@ rpcs::~rpcs()
 bool
 rpcs::got_pdu(connection *c, char *b, int sz)
 {
+        if (!reachable_) {
+            jsl_log(JSL_DBG_1, "rpcss::got_pdu: not reachable\n");
+            return true;
+        }
+
 	djob_t *j = new djob_t(c, b, sz);
 	c->incref();
 	bool succ = dispatchpool_->addObjJob(this, &rpcs::dispatch, j);
-	if (!succ) {
+	if (!succ || !reachable_) {
 		c->decref();
 		delete j;
 	}
