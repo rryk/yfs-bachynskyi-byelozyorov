@@ -74,13 +74,12 @@ class proposer {
   std::string c_v;	// value we would like to propose
   prop_t my_n;		// number of the last proposal used in this instance
 
-  void setn();
   bool prepare(unsigned instance, std::vector<std::string> &accepts, 
          std::vector<std::string> nodes,
          std::string &v);
   void accept(unsigned instance, std::vector<std::string> &accepts, 
         std::vector<std::string> nodes, std::string v);
-  void decide(unsigned instance, std::vector<std::string> accepts,
+  void decide(unsigned instance, std::vector<std::string> nodes,
         std::string v);
 
   void breakpoint1();
