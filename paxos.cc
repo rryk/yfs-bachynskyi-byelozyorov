@@ -170,7 +170,7 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
 
         printf("proposer::prepare: sending prepare RPC to %s\n", nodes[i].c_str());
 
-        h.get_rpcc()->call(paxos_protocol::preparereq, arg, res, rpcc::to(1000));
+        h.get_rpcc()->call(paxos_protocol::preparereq, me, arg, res, rpcc::to(1000));
 
         if (res.oldinstance)
         {
@@ -180,7 +180,7 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
         }
         else if (res.accept)
         {
-            printf("proposer::prepare: got accept from %s\n", nodes[i].c_str());
+            printf("proposer::prepare: got prepareres from %s\n", nodes[i].c_str());
 
             // add node to the list of accepted nodes
             accepts.push_back(nodes[i]);
@@ -218,11 +218,18 @@ proposer::accept(unsigned instance, std::vector<std::string> &accepts,
         arg.n = my_n;
         arg.v = v;
 
-        h.get_rpcc()->call(paxos_protocol::preparereq, arg, res, rpcc::to(1000));
+        printf("proposer::accept: sending accept RPC to %s\n", nodes[i].c_str());
+
+        h.get_rpcc()->call(paxos_protocol::acceptreq, me, arg, res, rpcc::to(1000));
 
         // FIXME: add support for oldinstance from accept RPC
         if (res)
+        {
+            printf("proposer::accept: got acceptres from %s\n", nodes[i].c_str());
             accepts.push_back(nodes[i]);
+        }
+        else
+            printf("proposer::accept: got reject from %s\n", nodes[i].c_str());
     }
 }
 
@@ -239,9 +246,7 @@ proposer::decide(unsigned instance, std::vector<std::string> nodes,
         arg.instance = instance;
         arg.v = v;
 
-        h.get_rpcc()->call(paxos_protocol::decidereq, arg, res, rpcc::to(1000));
-
-        // FIXME: add support for oldinstance from decide RPC
+        h.get_rpcc()->call(paxos_protocol::decidereq, me, arg, res, rpcc::to(1000));
     }
 }
 
@@ -277,14 +282,17 @@ acceptor::preparereq(std::string src, paxos_protocol::preparearg a,
 {
     // handle a preparereq message from proposer
 
-    if (a.instance < instance_h)
+    if (a.instance <= instance_h)
     {
+        printf("acceptor::preparereq: responding with oldinstance, a.instance = %u, instance_h = %u\n", a.instance, instance_h);
         r.oldinstance = 1;
         r.accept = instance_h;
         r.v_a = values[instance_h];
     }
     else if (a.n > n_h)
     {
+        printf("acceptor::preparereq: responding with prepareres, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
+
         n_h = a.n;
 
         r.oldinstance = 0;
@@ -296,6 +304,8 @@ acceptor::preparereq(std::string src, paxos_protocol::preparearg a,
     }
     else
     {
+        printf("acceptor::preparereq: responding with reject, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
+
         r.oldinstance = 0;
         r.accept = 0;
     }
@@ -308,10 +318,14 @@ acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
 {
     // handle an acceptreq message from proposer
 
-    if (a.instance < instance_h)
-            ; // FIXME: add support for oldinstance from accept RPC
-    else if (a.n > n_h)
+    if (a.instance <= instance_h)
     {
+        printf("acceptor::acceptreq: responding with oldinstance, a.instance = %u, instance_h = %u\n", a.instance, instance_h);
+        ; // FIXME: add support for oldinstance from accept RPC
+    }
+    else if (a.n >= n_h)
+    {
+        printf("acceptor::acceptreq: responding with acceptres, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
         n_a = a.n;
         v_a = a.v;
 
@@ -321,6 +335,7 @@ acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
     }
     else
     {
+        printf("acceptor::acceptreq: responding with reject, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
         r = 0;
     }
 
@@ -332,7 +347,7 @@ acceptor::decidereq(std::string src, paxos_protocol::decidearg a, int &r)
 {
     // handle an decide message from proposer
 
-    if (a.instance < instance_h)
+    if (a.instance <= instance_h)
         ; // ignore the old instance, since it won't matter
     else
     {
