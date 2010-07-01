@@ -354,6 +354,8 @@ acceptor::decidereq(std::string src, paxos_protocol::decidearg a, int &r)
         values[a.instance] = a.v;
         instance_h = a.instance;
         l->loginstance(a.instance, a.v);
+        commit(a.instance,a.v);
+
     }
 
     return paxos_protocol::OK;

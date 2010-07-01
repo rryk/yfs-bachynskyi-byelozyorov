@@ -308,7 +308,9 @@ rsm::joinreq(std::string m, viewstamp last, rsm_protocol::joinres &r)
     ret = rsm_client_protocol::BUSY;
   } else {
     // Lab 7: invoke config to create a new view that contains m
-    cfg->add(m);
+    if (cfg->add(m))
+        r.log=cfg->dump();
+
   }
   assert (pthread_mutex_unlock(&rsm_mutex) == 0);
   return ret;
