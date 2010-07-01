@@ -144,7 +144,7 @@ rsm::recovery()
   while (1) {
     while (!cfg->ismember(cfg->myaddr())) {
       if (join(primary)) {
-	printf("recovery: joined\n");
+        printf("(%s) recovery: joined\n", cfg->myaddr().c_str());
       } else {
 	assert(pthread_mutex_unlock(&rsm_mutex)==0);
 	sleep (30); // XXX make another node in cfg primary?
@@ -153,7 +153,7 @@ rsm::recovery()
     }
 
     if (r) inviewchange = false;
-    printf("recovery: go to sleep %d %d\n", insync, inviewchange);
+    printf("(%s) recovery: go to sleep %d %d\n", cfg->myaddr().c_str(), insync, inviewchange);
     pthread_cond_wait(&recovery_cond, &rsm_mutex);
   }
   assert(pthread_mutex_unlock(&rsm_mutex)==0);
@@ -200,7 +200,7 @@ rsm::join(std::string m) {
   rsm_protocol::joinres r;
 
   if (h.get_rpcc() != 0) {
-    printf("rsm::join: %s mylast (%d,%d)\n", m.c_str(), last_myvs.vid, 
+    printf("(%s) rsm::join: %s mylast (%d,%d)\n", cfg->myaddr().c_str(), m.c_str(), last_myvs.vid,
 	   last_myvs.seqno);
     assert(pthread_mutex_unlock(&rsm_mutex)==0);
     ret = h.get_rpcc()->call(rsm_protocol::joinreq, cfg->myaddr(), last_myvs, 
@@ -208,11 +208,11 @@ rsm::join(std::string m) {
     assert(pthread_mutex_lock(&rsm_mutex)==0);
   }
   if (h.get_rpcc() == 0 || ret != rsm_protocol::OK) {
-    printf("rsm::join: couldn't reach %s %p %d\n", m.c_str(), 
+    printf("(%s) rsm::join: couldn't reach %s %p %d\n", cfg->myaddr().c_str(), m.c_str(),
 	   h.get_rpcc(), ret);
     return false;
   }
-  printf("rsm::join: succeeded %s\n", r.log.c_str());
+  printf("(%s) rsm::join: succeeded %s\n", cfg->myaddr().c_str(), r.log.c_str());
   cfg->restore(r.log);
   return true;
 }
@@ -298,13 +298,13 @@ rsm::joinreq(std::string m, viewstamp last, rsm_protocol::joinres &r)
   int ret = rsm_client_protocol::OK;
 
   assert (pthread_mutex_lock(&rsm_mutex) == 0);
-  printf("joinreq: src %s last (%d,%d) mylast (%d,%d)\n", m.c_str(), 
+  printf("(%s) joinreq: src %s last (%d,%d) mylast (%d,%d)\n", cfg->myaddr().c_str(), m.c_str(),
 	 last.vid, last.seqno, last_myvs.vid, last_myvs.seqno);
   if (cfg->ismember(m)) {
-    printf("joinreq: is still a member\n");
+    printf("(%s) joinreq: is still a member\n", cfg->myaddr().c_str());
     r.log = cfg->dump();
   } else if (cfg->myaddr() != primary) {
-    printf("joinreq: busy\n");
+    printf("(%s) joinreq: busy\n", cfg->myaddr().c_str());
     ret = rsm_client_protocol::BUSY;
   } else {
     // Lab 7: invoke config to create a new view that contains m
@@ -329,7 +329,7 @@ rsm::client_members(int i, std::vector<std::string> &r)
   m = cfg->get_curview();
   m.push_back(primary);
   r = m;
-  printf("rsm::client_members return %s m %s\n", cfg->print_curview().c_str(),
+  printf("(%s) rsm::client_members return %s m %s\n", cfg->myaddr().c_str(), cfg->print_curview().c_str(),
 	 primary.c_str());
   assert(pthread_mutex_unlock(&rsm_mutex)==0);
   return rsm_protocol::OK;
@@ -346,7 +346,7 @@ rsm::set_primary()
   assert (c.size() > 0);
 
   if (isamember(primary,c)) {
-    printf("set_primary: primary stays %s\n", primary.c_str());
+    printf("(%s) set_primary: primary stays %s\n", cfg->myaddr().c_str(), primary.c_str());
     return;
   }
 
@@ -354,7 +354,7 @@ rsm::set_primary()
   for (unsigned i = 0; i < p.size(); i++) {
     if (isamember(p[i], c)) {
       primary = p[i];
-      printf("set_primary: primary is %s\n", primary.c_str());
+      printf("(%s) set_primary: primary is %s\n", cfg->myaddr().c_str(), primary.c_str());
       return;
     }
   }
@@ -391,7 +391,7 @@ rsm::net_repair_wo(bool heal)
   for (unsigned i  = 0; i < m.size(); i++) {
     if (m[i] != cfg->myaddr()) {
         handle h(m[i]);
-	printf("rsm::net_repair_wo: %s %d\n", m[i].c_str(), heal);
+        printf("(%s) rsm::net_repair_wo: %s %d\n", cfg->myaddr().c_str(), m[i].c_str(), heal);
 	if (h.get_rpcc()) h.get_rpcc()->set_reachable(heal);
     }
   }
@@ -402,7 +402,7 @@ rsm_test_protocol::status
 rsm::test_net_repairreq(int heal, int &r)
 {
   assert(pthread_mutex_lock(&rsm_mutex)==0);
-  printf("rsm::test_net_repairreq: %d (dopartition %d, partitioned %d)\n", 
+  printf("(%s) rsm::test_net_repairreq: %d (dopartition %d, partitioned %d)\n", cfg->myaddr().c_str(),
 	 heal, dopartition, partitioned);
   if (heal) {
     net_repair_wo(heal);
@@ -422,7 +422,7 @@ void
 rsm::breakpoint1()
 {
   if (break1) {
-    printf("Dying at breakpoint 1 in rsm!\n");
+    printf("(%s) Dying at breakpoint 1 in rsm!\n", cfg->myaddr().c_str());
     exit(1);
   }
 }
@@ -431,7 +431,7 @@ void
 rsm::breakpoint2()
 {
   if (break2) {
-    printf("Dying at breakpoint 2 in rsm!\n");
+    printf("(%s) Dying at breakpoint 2 in rsm!\n", cfg->myaddr().c_str());
     exit(1);
   }
 }
@@ -441,7 +441,7 @@ rsm::breakpointreq(int b, int &r)
 {
   r = rsm_test_protocol::OK;
   assert(pthread_mutex_lock(&rsm_mutex)==0);
-  printf("rsm::breakpointreq: %d\n", b);
+  printf("(%s) rsm::breakpointreq: %d\n", cfg->myaddr().c_str(), b);
   if (b == 1) break1 = true;
   else if (b == 2) break2 = true;
   else if (b == 3 || b == 4) cfg->breakpoint(b);
