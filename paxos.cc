@@ -168,14 +168,15 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
         arg.instance = instance;
         arg.n = my_n;
 
-        printf("(%s) proposer::prepare: sending prepare RPC to %s\n", me.c_str(), nodes[i].c_str());
+        printf("(%s) proposer::prepare: sending preparereq RPC to %s\n", me.c_str(), nodes[i].c_str());
 
         if (h.get_rpcc()->call(paxos_protocol::preparereq, me, arg, res, rpcc::to(1000)) == paxos_protocol::OK)
         {
             if (res.oldinstance)
             {
-                // TODO: handle old instance response
-                printf("(%s) proposer::prepare: got oldinstance from %s\n", me.c_str(), nodes[i].c_str());
+                acc->commit(instance, res.v_a);
+                stable = true;
+
                 return false;
             }
             else if (res.accept)
@@ -199,6 +200,10 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
                 return false;
             }
         }
+        else
+        {
+            printf("(%s) proposer::prepare: failed to get response from %s\n", me.c_str(), nodes[i].c_str());
+        }
     }
 
     return true;
@@ -219,7 +224,7 @@ proposer::accept(unsigned instance, std::vector<std::string> &accepts,
         arg.n = my_n;
         arg.v = v;
 
-        printf("(%s) proposer::accept: sending accept RPC to %s\n", me.c_str(), nodes[i].c_str());
+        printf("(%s) proposer::accept: sending acceptreq RPC to %s\n", me.c_str(), nodes[i].c_str());
 
         if (h.get_rpcc()->call(paxos_protocol::acceptreq, me, arg, res, rpcc::to(1000)) == paxos_protocol::OK)
         {
@@ -231,6 +236,10 @@ proposer::accept(unsigned instance, std::vector<std::string> &accepts,
             }
             else
                 printf("(%s) proposer::accept: got reject from %s\n", me.c_str(), nodes[i].c_str());
+        }
+        else
+        {
+            printf("(%s) proposer::prepare: failed to get response from %s\n", me.c_str(), nodes[i].c_str());
         }
     }
 }
@@ -247,6 +256,8 @@ proposer::decide(unsigned instance, std::vector<std::string> nodes,
 
         arg.instance = instance;
         arg.v = v;
+
+        printf("(%s) proposer::accept: sending decidereq RPC to %s\n", me.c_str(), nodes[i].c_str());
 
         h.get_rpcc()->call(paxos_protocol::decidereq, me, arg, res, rpcc::to(1000));
     }
@@ -286,14 +297,14 @@ acceptor::preparereq(std::string src, paxos_protocol::preparearg a,
 
     if (a.instance <= instance_h)
     {
-        printf("(%s) acceptor::preparereq: responding with oldinstance, a.instance = %u, instance_h = %u\n", me.c_str(), a.instance, instance_h);
+        printf("(%s) acceptor::preparereq: responding with oldinstance to %s, a.instance = %u, instance_h = %u\n", me.c_str(), src.c_str(), a.instance, instance_h);
         r.oldinstance = 1;
         r.accept = instance_h;
         r.v_a = values[instance_h];
     }
     else if (a.n > n_h)
     {
-        printf("(%s) acceptor::preparereq: responding with prepareres, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", me.c_str(), a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
+        printf("(%s) acceptor::preparereq: responding with prepareres to %s, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", me.c_str(), src.c_str(), a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
 
         n_h = a.n;
 
@@ -306,7 +317,7 @@ acceptor::preparereq(std::string src, paxos_protocol::preparearg a,
     }
     else
     {
-        printf("(%s)  acceptor::preparereq: responding with reject, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", me.c_str(), a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
+        printf("(%s)  acceptor::preparereq: responding with reject to %s, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", me.c_str(), src.c_str(), a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
 
         r.oldinstance = 0;
         r.accept = 0;
@@ -322,12 +333,12 @@ acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
 
     if (a.instance <= instance_h)
     {
-        printf("(%s) acceptor::acceptreq: responding with oldinstance, a.instance = %u, instance_h = %u\n", me.c_str(), a.instance, instance_h);
+        printf("(%s) acceptor::acceptreq: responding with oldinstance to %s, a.instance = %u, instance_h = %u\n", me.c_str(), src.c_str(), a.instance, instance_h);
         ; // FIXME: add support for oldinstance from accept RPC
     }
     else if (a.n >= n_h)
     {
-        printf("(%s) acceptor::acceptreq: responding with acceptres, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", me.c_str(), a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
+        printf("(%s) acceptor::acceptreq: responding with acceptres to %s, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", me.c_str(), src.c_str(), a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
         n_a = a.n;
         v_a = a.v;
 
@@ -337,7 +348,7 @@ acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
     }
     else
     {
-        printf("(%s) acceptor::acceptreq: responding with reject, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", me.c_str(), a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
+        printf("(%s) acceptor::acceptreq: responding with reject to %s, a.n.n = %u, a.n.m = %s, n_h.n = %u, n_h.m = %s\n", me.c_str(), src.c_str(), a.n.n, a.n.m.c_str(), n_h.n, n_h.m.c_str());
         r = 0;
     }
 
@@ -351,12 +362,12 @@ acceptor::decidereq(std::string src, paxos_protocol::decidearg a, int &r)
 
     if (a.instance <= instance_h)
     {
-        printf("(%s) acceptor::decidereq: ignored oldinstance, a.instance = %u, instance_h = %u\n", me.c_str(), a.instance, instance_h);
+        printf("(%s) acceptor::decidereq: ignored oldinstance to %s, a.instance = %u, instance_h = %u\n", me.c_str(), src.c_str(), a.instance, instance_h);
         ; // ignore the old instance, since it won't matter
     }
     else
     {
-        printf("(%s) acceptor::decidereq: committing value, a.instance = %u, a.v = %s\n", me.c_str(), a.instance, a.v.c_str());
+        printf("(%s) acceptor::decidereq: committing value (decide from %s), a.instance = %u, a.v = %s\n", me.c_str(), src.c_str(), a.instance, a.v.c_str());
 
         commit(a.instance,a.v);
     }
