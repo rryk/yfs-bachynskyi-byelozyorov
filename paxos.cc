@@ -119,7 +119,7 @@ proposer::run(int instance, std::vector<std::string> nodes, std::string newv)
             accept(instance, accepts, nodes1, v); // FIXME: add support for oldinstance from accept RPC
 
             if (majority(c_nodes, accepts)) {
-                printf("paxos::manager: received a majority of accept responses\n");
+                printf("paxos::manager: received a majority of accept responses, v=%s\n", v.c_str());
 
                 breakpoint2();
 
@@ -140,6 +140,7 @@ proposer::run(int instance, std::vector<std::string> nodes, std::string newv)
     }
     else
     {
+        // TODO: handle reject response by one of the clients
         printf("paxos::manager: prepare is rejected %d\n", stable);
     }
 
@@ -153,8 +154,10 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
          std::vector<std::string> nodes,
          std::string &v)
 {
+    printf("proposer:prepare: calculating my_n, before, my_n.n=%u, my_n.m=%s, acc->get_n_h().n=%u, me=%s\n", my_n.n, my_n.m.c_str(), acc->get_n_h().n, me.c_str());
     my_n.n = acc->get_n_h().n + 1 > my_n.n + 1 ? acc->get_n_h().n + 1 : my_n.n + 1;
     my_n.m = me;
+    printf("proposer:prepare: calculating my_n, after, my_n.n=%u, my_n.m=%s, acc->get_n_h().n=%u, me=%s\n", my_n.n, my_n.m.c_str(), acc->get_n_h().n, me.c_str());
 
     // set maximum id to the minimum (to be updated in a loop with larger id)
     prop_t max_n_a = {0, std::string()};
@@ -184,7 +187,7 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
                 }
                 else if (res.accept)
                 {
-                    printf("proposer::prepare: got prepareres from %s\n", nodes[i].c_str());
+                    printf("proposer::prepare: got prepareres from %s, res.n_a.n=%u, res.n_a.m=%s, res.v_a=%s\n", nodes[i].c_str(), res.n_a.n, res.n_a.m.c_str(), res.v_a.c_str());
 
                     // add node to the list of accepted nodes
                     accepts.push_back(nodes[i]);
@@ -194,11 +197,12 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
                     {
                         max_n_a = res.n_a;
                         v = res.v_a;
+                        printf("proposer::propose: updated value to newv=%s, max_n_a.n=%u, max_n_a.m=%s\n",
+                               v.c_str(), max_n_a.n, max_n_a.m.c_str());
                     }
                 }
                 else
                 {
-                    // TODO: handle reject response
                     printf("proposer::prepare: got reject from %s\n", nodes[i].c_str());
                     return false;
                 }
@@ -272,7 +276,7 @@ proposer::decide(unsigned instance, std::vector<std::string> nodes,
         arg.instance = instance;
         arg.v = v;
 
-        printf("proposer::decide: sending decidereq RPC to %s\n", nodes[i].c_str());
+        printf("proposer::decide: sending decidereq RPC to %s with arg.v=%s\n", nodes[i].c_str(), arg.v.c_str());
 
         h.get_rpcc()->call(paxos_protocol::decidereq, me, arg, res, rpcc::to(1000));
     }
