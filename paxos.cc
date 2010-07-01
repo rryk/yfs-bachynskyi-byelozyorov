@@ -170,33 +170,34 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
 
         printf("(%s) proposer::prepare: sending prepare RPC to %s\n", me.c_str(), nodes[i].c_str());
 
-        h.get_rpcc()->call(paxos_protocol::preparereq, me, arg, res, rpcc::to(1000));
-
-        if (res.oldinstance)
+        if (h.get_rpcc()->call(paxos_protocol::preparereq, me, arg, res, rpcc::to(1000)) == paxos_protocol::OK)
         {
-            // TODO: handle old instance response
-            printf("(%s) proposer::prepare: got oldinstance from %s\n", me.c_str(), nodes[i].c_str());
-            return false;
-        }
-        else if (res.accept)
-        {
-            printf("(%s) proposer::prepare: got prepareres from %s\n", me.c_str(), nodes[i].c_str());
-
-            // add node to the list of accepted nodes
-            accepts.push_back(nodes[i]);
-
-            // check if the node returned value and it's ID it largest than last found
-            if (res.v_a.size() != 0 && res.n_a > max_n_a)
+            if (res.oldinstance)
             {
-                max_n_a = res.n_a;
-                v = res.v_a;
+                // TODO: handle old instance response
+                printf("(%s) proposer::prepare: got oldinstance from %s\n", me.c_str(), nodes[i].c_str());
+                return false;
             }
-        }
-        else
-        {
-            // TODO: handle reject response
-            printf("(%s) proposer::prepare: got reject from %s\n", me.c_str(), nodes[i].c_str());
-            return false;
+            else if (res.accept)
+            {
+                printf("(%s) proposer::prepare: got prepareres from %s\n", me.c_str(), nodes[i].c_str());
+
+                // add node to the list of accepted nodes
+                accepts.push_back(nodes[i]);
+
+                // check if the node returned value and it's ID it largest than last found
+                if (res.v_a.size() != 0 && res.n_a > max_n_a)
+                {
+                    max_n_a = res.n_a;
+                    v = res.v_a;
+                }
+            }
+            else
+            {
+                // TODO: handle reject response
+                printf("(%s) proposer::prepare: got reject from %s\n", me.c_str(), nodes[i].c_str());
+                return false;
+            }
         }
     }
 
@@ -220,16 +221,17 @@ proposer::accept(unsigned instance, std::vector<std::string> &accepts,
 
         printf("(%s) proposer::accept: sending accept RPC to %s\n", me.c_str(), nodes[i].c_str());
 
-        h.get_rpcc()->call(paxos_protocol::acceptreq, me, arg, res, rpcc::to(1000));
-
-        // FIXME: add support for oldinstance from accept RPC
-        if (res)
+        if (h.get_rpcc()->call(paxos_protocol::acceptreq, me, arg, res, rpcc::to(1000)) == paxos_protocol::OK)
         {
-            printf("(%s) proposer::accept: got acceptres from %s\n", me.c_str(), nodes[i].c_str());
-            accepts.push_back(nodes[i]);
+            // FIXME: add support for oldinstance from accept RPC
+            if (res)
+            {
+                printf("(%s) proposer::accept: got acceptres from %s\n", me.c_str(), nodes[i].c_str());
+                accepts.push_back(nodes[i]);
+            }
+            else
+                printf("(%s) proposer::accept: got reject from %s\n", me.c_str(), nodes[i].c_str());
         }
-        else
-            printf("(%s) proposer::accept: got reject from %s\n", me.c_str(), nodes[i].c_str());
     }
 }
 
