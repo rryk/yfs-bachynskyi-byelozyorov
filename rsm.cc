@@ -320,13 +320,13 @@ rsm::joinreq(std::string m, viewstamp last, rsm_protocol::joinres &r)
     printf("rsm::joinreq: adding node %s to the list", m.c_str());
     if (cfg->add(m))
     {
-      printf("rsm::joinreq: added %s", m.c_str());
+      printf("rsm::joinreq: added %s\n", m.c_str());
       r.log=cfg->dump();
-      printf("rsm::joinreq: r.log=%s", r.log.c_str());
+      printf("rsm::joinreq: r.log=%s\n", r.log.c_str());
     }
     else
     {
-      printf("rsm::joinreq: failed to add %s", m.c_str());
+      printf("rsm::joinreq: failed to add %s\n", m.c_str());
       ret = rsm_client_protocol::ERR;
     }
   }

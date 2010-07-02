@@ -278,7 +278,10 @@ proposer::decide(unsigned instance, std::vector<std::string> nodes,
 
         printf("proposer::decide: sending decidereq RPC to %s with arg.v=%s\n", nodes[i].c_str(), arg.v.c_str());
 
-        h.get_rpcc()->call(paxos_protocol::decidereq, me, arg, res, rpcc::to(1000));
+        if (h.get_rpcc())
+            h.get_rpcc()->call(paxos_protocol::decidereq, me, arg, res, rpcc::to(1000));
+        else
+            printf("proposer::decide: failed to create handle for %s\n", nodes[i].c_str());
     }
 }
 
