@@ -229,7 +229,7 @@ rsm::join(std::string m) {
 void 
 rsm::commit_change() 
 {
-    pthread_mutex_lock(&rsm_mutex);
+    //pthread_mutex_lock(&rsm_mutex);
 
     // check if the primary is not in the current view
     // and set the node with lowest id as the primary if
@@ -237,7 +237,7 @@ rsm::commit_change()
     printf("rsm::commit_change: updating primary if needed\n");
     set_primary();
 
-    pthread_mutex_unlock(&rsm_mutex);
+    //pthread_mutex_unlock(&rsm_mutex);
 
     // signal to recovery thread to check if we need to join the current view
     printf("rsm::commit_change: signal to recovery thread\n");
