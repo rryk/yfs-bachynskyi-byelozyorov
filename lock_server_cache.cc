@@ -22,7 +22,8 @@ retrythread(void *x)
   return 0;
 }
 
-lock_server_cache::lock_server_cache()
+lock_server_cache::lock_server_cache(class rsm *_rsm) 
+  : rsm (_rsm)
 {
   pthread_t th;
   int r = pthread_create(&th, NULL, &revokethread, (void *) this);
