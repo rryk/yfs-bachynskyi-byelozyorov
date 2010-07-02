@@ -506,7 +506,7 @@ if ($do_run[7]) {
   print "Kill fourth server (PID: $pid[3]) on port $p[3]\n";
   kill "TERM", $pid[3];
 
-  sleep 5;
+  sleep 15;
 
   print "Kill third server (PID: $pid[2]) on port $p[2]\n";
   kill "TERM", $pid[2];
