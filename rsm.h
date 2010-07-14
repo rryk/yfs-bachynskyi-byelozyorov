@@ -226,6 +226,7 @@ template<class S, class A1, class A2, class A3, class A4, class A5, class R> voi
       args >> a2;
       args >> a3;
       args >> a4;
+      args >> a5;
       assert(args.okdone());
       int b = (sob->*meth)(a1,a2,a3,a4,a5,r);
       ret << r;
