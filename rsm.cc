@@ -145,26 +145,29 @@ rsm::reg1(int proc, handler *h)
 void
 rsm::recovery()
 {
-  bool r = false;
+    bool r = false;
 
-  assert(pthread_mutex_lock(&rsm_mutex)==0);
+    assert(pthread_mutex_lock(&rsm_mutex)==0);
 
-  while (1) {
-    while (!cfg->ismember(cfg->myaddr())) {
-      if (join(primary)) {
-	printf("recovery: joined\n");
-      } else {
-	assert(pthread_mutex_unlock(&rsm_mutex)==0);
-	sleep (30); // XXX make another node in cfg primary?
-	assert(pthread_mutex_lock(&rsm_mutex)==0);
-      }
+    while (1) {
+        while (!cfg->ismember(cfg->myaddr())) {
+            printf("rsm::recovery: we are not in the list of members, starting join\n");
+            if (join(primary)) {
+                printf("rsm::recovery: join succeeded\n");
+            } else {
+                printf("rsm::recovery: failed to join, sleeping for 30 seconds\n");
+                assert(pthread_mutex_unlock(&rsm_mutex)==0);
+                sleep (30); // XXX make another node in cfg primary?
+                assert(pthread_mutex_lock(&rsm_mutex)==0);
+            }
+        }
+
+        if (r) inviewchange = false;
+        printf("rsm::recovery: go to sleep %d %d\n", insync, inviewchange);
+        pthread_cond_wait(&recovery_cond, &rsm_mutex);
+        printf("rsm::recovery: got signal to check if recovery is needed\n");
     }
-
-    if (r) inviewchange = false;
-    printf("recovery: go to sleep %d %d\n", insync, inviewchange);
-    pthread_cond_wait(&recovery_cond, &rsm_mutex);
-  }
-  assert(pthread_mutex_unlock(&rsm_mutex)==0);
+    assert(pthread_mutex_unlock(&rsm_mutex)==0);
 }
 
 bool
@@ -229,7 +232,7 @@ rsm::join(std::string m) {
   rsm_protocol::joinres r;
 
   if (h.get_rpcc() != 0) {
-    printf("rsm::join: %s mylast (%d,%d)\n", m.c_str(), last_myvs.vid, 
+    printf("rsm::join: %s mylast (%d,%d)\n", m.c_str(), last_myvs.vid,
 	   last_myvs.seqno);
     assert(pthread_mutex_unlock(&rsm_mutex)==0);
     ret = h.get_rpcc()->call(rsm_protocol::joinreq, cfg->myaddr(), last_myvs, 
@@ -237,7 +240,7 @@ rsm::join(std::string m) {
     assert(pthread_mutex_lock(&rsm_mutex)==0);
   }
   if (h.get_rpcc() == 0 || ret != rsm_protocol::OK) {
-    printf("rsm::join: couldn't reach %s %p %d\n", m.c_str(), 
+    printf("rsm::join: couldn't reach %s %p %d\n", m.c_str(),
 	   h.get_rpcc(), ret);
     return false;
   }
@@ -255,10 +258,19 @@ rsm::join(std::string m) {
 void 
 rsm::commit_change() 
 {
-  pthread_mutex_lock(&rsm_mutex);
-  // Lab 7:
-  // - If I am not part of the new view, start recovery
-  pthread_mutex_unlock(&rsm_mutex);
+    //pthread_mutex_lock(&rsm_mutex);
+
+    // check if the primary is not in the current view
+    // and set the node with lowest id as the primary if
+    // that's the case
+    printf("rsm::commit_change: updating primary if needed\n");
+    set_primary();
+
+    //pthread_mutex_unlock(&rsm_mutex);
+
+    // signal to recovery thread to check if we need to join the current view
+    printf("rsm::commit_change: signal to recovery thread\n");
+    pthread_cond_signal(&recovery_cond);
 }
 
 
@@ -343,7 +355,7 @@ rsm::joinreq(std::string m, viewstamp last, rsm_protocol::joinres &r)
   int ret = rsm_protocol::OK;
 
   assert (pthread_mutex_lock(&rsm_mutex) == 0);
-  printf("joinreq: src %s last (%d,%d) mylast (%d,%d)\n", m.c_str(), 
+  printf("joinreq: src %s last (%d,%d) mylast (%d,%d)\n", m.c_str(),
 	 last.vid, last.seqno, last_myvs.vid, last_myvs.seqno);
   if (cfg->ismember(m)) {
     printf("joinreq: is still a member\n");
@@ -353,6 +365,18 @@ rsm::joinreq(std::string m, viewstamp last, rsm_protocol::joinres &r)
     ret = rsm_protocol::BUSY;
   } else {
     // Lab 7: invoke config to create a new view that contains m
+    printf("rsm::joinreq: adding node %s to the list", m.c_str());
+    if (cfg->add(m))
+    {
+      printf("rsm::joinreq: added %s\n", m.c_str());
+      r.log=cfg->dump();
+      printf("rsm::joinreq: r.log=%s\n", r.log.c_str());
+    }
+    else
+    {
+      printf("rsm::joinreq: failed to add %s\n", m.c_str());
+      ret = rsm_client_protocol::ERR;
+    }
   }
   assert (pthread_mutex_unlock(&rsm_mutex) == 0);
   return ret;
@@ -433,7 +457,7 @@ rsm::net_repair_wo(bool heal)
   for (unsigned i  = 0; i < m.size(); i++) {
     if (m[i] != cfg->myaddr()) {
         handle h(m[i]);
-	printf("rsm::net_repair_wo: %s %d\n", m[i].c_str(), heal);
+        printf("rsm::net_repair_wo: %s %d\n", m[i].c_str(), heal);
 	if (h.get_rpcc()) h.get_rpcc()->set_reachable(heal);
     }
   }
@@ -444,7 +468,7 @@ rsm_test_protocol::status
 rsm::test_net_repairreq(int heal, int &r)
 {
   assert(pthread_mutex_lock(&rsm_mutex)==0);
-  printf("rsm::test_net_repairreq: %d (dopartition %d, partitioned %d)\n", 
+  printf("rsm::test_net_repairreq: %d (dopartition %d, partitioned %d)\n",
 	 heal, dopartition, partitioned);
   if (heal) {
     net_repair_wo(heal);

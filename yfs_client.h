@@ -7,10 +7,27 @@
 #include <vector>
 
 #include "lock_protocol.h"
-#include "lock_client.h"
+#include "lock_client_cache.h"
+
+class lock_release_user_impl: public lock_release_user
+{
+private:
+    extent_client* ec;
+
+public:
+    lock_release_user_impl(extent_client* excl):
+            ec(excl)
+    {;}
+
+    void dorelease(lock_protocol::lockid_t id){
+        ec->flush(id);
+    }
+
+};
 
   class yfs_client {
   extent_client *ec;
+  lock_client_cache *lc;
  public:
 
   typedef unsigned long long inum;
@@ -44,8 +61,18 @@
   bool isdir(inum);
   inum ilookup(inum di, std::string name);
 
+  lock_protocol::status acquire(lock_protocol::lockid_t);
+  lock_protocol::status release(lock_protocol::lockid_t);
+
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);
+
+  int listing(inum, std::vector<dirent> &);
+  int create(inum parentINum, inum fileINum, const char * fileName);
+  int update(inum fileINum, std::string content, int offset, int size, int & bytesWritten);
+  int retrieve(inum fileINum, int offset, int size, std::string &content);
+  int setsize(inum fileINum, int newSize);
+  int remove(inum parentINum, const char * fileName);
 };
 
 #endif 
