@@ -7,6 +7,7 @@
 #include "lock_protocol.h"
 #include "rpc.h"
 #include "lock_server.h"
+#include "rsm.h"
 
 /** cache_lock_t class
  * 
@@ -53,11 +54,13 @@ private:
 };
 
 class lock_server_cache {
+private:
+    class rsm *rsm;
 public:
 	/// This is constructor for the lock server. It will start revoker
 	/// and retryer threads and set up internal variables to their initial
 	/// values.
-	lock_server_cache();
+        lock_server_cache(class rsm *rsm=0);
 	
 	/// This function is to be executed in a separate thread and
 	/// it will process revoke requests in a continuous loop.
