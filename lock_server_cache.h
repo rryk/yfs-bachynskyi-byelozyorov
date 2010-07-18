@@ -53,7 +53,7 @@ private:
 	std::list<std::string> interestedClients; // list of the clients that are waiting for this lock
 };
 
-class lock_server_cache {
+class lock_server_cache : public rsm_state_transfer{
 private:
     class rsm *rsm;
 public:
@@ -99,6 +99,10 @@ public:
 	 *          failure code.
 	 */
 	lock_protocol::status release(int clt, lock_protocol::lockid_t lid, int &);
+
+        virtual std::string marshal_state();
+        virtual void unmarshal_state(std::string);
+
 	
 protected:
     std::map<lock_protocol::lockid_t, cache_lock_t> locks; // lock map

@@ -235,6 +235,14 @@ config::remove_wo(std::string m)
   return r;
 }
 
+bool config::remove(std::string nodeID)
+{
+    pthread_mutex_lock(&cfg_mutex);
+    bool res=remove_wo(nodeID);
+    pthread_mutex_unlock(&cfg_mutex);
+    return res;
+}
+
 void
 config::heartbeater()
 {
@@ -251,15 +259,15 @@ config::heartbeater()
     gettimeofday(&now, NULL);
     next_timeout.tv_sec = now.tv_sec + 3;
     next_timeout.tv_nsec = 0;
-    printf("heartbeater: go to sleep\n");
+//    printf("heartbeater: go to sleep\n");
     pthread_cond_timedwait(&config_cond, &cfg_mutex, &next_timeout);
 
     stable = true;
 
-    printf("heartbeater: current membership %s\n", print_members(mems).c_str());
+//    printf("heartbeater: current membership %s\n", print_members(mems).c_str());
 
     if (!isamember(me, mems)) {
-      printf("heartbeater: not member yet; skip hearbeat\n");
+//      printf("heartbeater: not member yet; skip hearbeat\n");
       continue;
     }
 
@@ -301,7 +309,7 @@ config::heartbeat(std::string m, unsigned vid, int &r)
   assert(pthread_mutex_lock(&cfg_mutex)==0);
   int ret = paxos_protocol::ERR;
   r = (int) myvid;
-  printf("heartbeat from %s(%d) myvid %d\n", m.c_str(), vid, myvid);
+//  printf("heartbeat from %s(%d) myvid %d\n", m.c_str(), vid, myvid);
   if (vid == myvid) {
     ret = paxos_protocol::OK;
   } else if (pro->isrunning()) {
@@ -322,7 +330,7 @@ config::doheartbeat(std::string m)
   unsigned vid = myvid;
   heartbeat_t res = OK;
 
-  printf("doheartbeater to %s (%d)\n", m.c_str(), vid);
+//  printf("doheartbeater to %s (%d)\n", m.c_str(), vid);
   handle h(m);
   if (h.get_rpcc()) {
     assert(pthread_mutex_unlock(&cfg_mutex)==0);
@@ -335,8 +343,8 @@ config::doheartbeat(std::string m)
 	ret == rpc_const::oldsrv_failure) {
       mgr.delete_handle(m);
     } else {
-      printf("doheartbeat: problem with %s (%d) my vid %d his vid %d\n", 
-	     m.c_str(), ret, vid, r);
+//      printf("doheartbeat: problem with %s (%d) my vid %d his vid %d\n",
+//	     m.c_str(), ret, vid, r);
       if (ret < 0) res = FAILURE;
       else res = VIEWERR;
     }

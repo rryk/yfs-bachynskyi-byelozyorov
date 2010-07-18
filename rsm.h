@@ -63,7 +63,6 @@ class rsm : public config_view_change {
   std::string find_highest(viewstamp &vs, std::string &m, unsigned &vid);
   bool sync_with_backups();
   bool sync_with_primary();
-  bool amiprimary_wo();
   void net_repair_wo(bool heal);
   void breakpoint1();
   void breakpoint2();
@@ -72,6 +71,7 @@ class rsm : public config_view_change {
   rsm (std::string _first, std::string _me);
   ~rsm() {};
 
+  bool amiprimary_wo();
   bool amiprimary();
   void set_state_transfer(rsm_state_transfer *_stf) { stf = _stf; };
   void recovery();

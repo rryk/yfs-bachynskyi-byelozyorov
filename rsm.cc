@@ -151,6 +151,7 @@ rsm::recovery()
 
     while (1) {
         while (!cfg->ismember(cfg->myaddr())) {
+//            inviewchange=true;
             printf("rsm::recovery: we are not in the list of members, starting join\n");
             if (join(primary)) {
                 printf("rsm::recovery: join succeeded\n");
@@ -161,6 +162,7 @@ rsm::recovery()
                 assert(pthread_mutex_lock(&rsm_mutex)==0);
             }
         }
+//        inviewchange=false;
 
         if (r) inviewchange = false;
         printf("rsm::recovery: go to sleep %d %d\n", insync, inviewchange);
@@ -297,10 +299,77 @@ rsm::execute(int procno, std::string req)
 // machine.
 //
 rsm_client_protocol::status
-rsm::client_invoke(int procno, std::string req, std::string &r)
+rsm::client_invoke(int procno, std::string req, std::string &responce)
 {
+  printf("rsm::client_invoke %d\n",procno);
   int ret = rsm_client_protocol::OK;
-  // For lab 8
+
+  pthread_mutex_lock(&rsm_mutex);
+
+  if (!amiprimary_wo())
+  {
+      printf("rsm::client_invoke::notprimary\n");
+      pthread_mutex_unlock(&rsm_mutex);
+      return rsm_client_protocol::NOTPRIMARY;
+  }
+
+
+  if(inviewchange)
+  {
+      printf("rsm::client_invoke::inviewchange\n");
+      pthread_mutex_unlock(&rsm_mutex);
+      return rsm_client_protocol::BUSY;
+  }
+  pthread_mutex_unlock(&rsm_mutex);
+
+
+  pthread_mutex_lock(&invoke_mutex);
+
+  pthread_mutex_lock(&rsm_mutex);
+
+  viewstamp stamp=last_myvs;
+  stamp.seqno=stamp.seqno+1;
+  last_myvs=stamp;
+
+  pthread_mutex_unlock(&rsm_mutex);
+
+  std::vector<std::string> slaves=cfg->get_curview();
+
+  bool failed=false;
+  std::string failedID;
+  for (unsigned i = 0; i < slaves.size(); i++)
+  {
+      if(cfg->myaddr().compare(slaves[i])==0)
+          continue;
+      handle h(slaves[i]);
+      int r;
+      ret = h.get_rpcc()->call(rsm_protocol::invoke, procno, stamp, req, r, rpcc::to(1000));
+      while(ret==rsm_protocol::BUSY)
+      {
+          sleep(1);
+          ret = h.get_rpcc()->call(rsm_protocol::invoke, procno, stamp, req, r, rpcc::to(1000));
+      }
+      if (ret==rsm_protocol::ERR)
+      {
+          failed=true;
+          failedID=slaves[i];
+      }
+  }
+  printf("Primary executed!!!");
+  responce=execute(procno,req);
+  pthread_mutex_unlock(&invoke_mutex);
+
+  if (!failed)
+  {
+      ret=rsm_client_protocol::OK;
+  }
+  else
+  {
+      printf("rsm::client_invoke::ERR\n");
+      cfg->remove(failedID);
+      ret=rsm_client_protocol::ERR;
+  }
+
   return ret;
 }
 
@@ -315,7 +384,33 @@ rsm_protocol::status
 rsm::invoke(int proc, viewstamp vs, std::string req, int &dummy)
 {
   rsm_protocol::status ret = rsm_protocol::OK;
-  // For lab 8
+  pthread_mutex_lock(&rsm_mutex);
+
+  if(inviewchange)
+  {
+      printf("Invoke: busy\n");
+      pthread_mutex_unlock(&rsm_mutex);
+      return rsm_protocol::BUSY;
+  }
+
+  if (amiprimary_wo() || !cfg->ismember(cfg->myaddr()))
+  {
+      pthread_mutex_unlock(&rsm_mutex);
+      return rsm_protocol::ERR;
+  }
+
+  viewstamp stamp=last_myvs;
+  stamp.seqno=stamp.seqno+1;
+  printf("My viewstamp: %d %d, primary viewstamp: %d %d\n",stamp.vid,stamp.seqno,vs.vid,vs.seqno);
+  if(vs.vid!=stamp.vid || vs.seqno!=stamp.seqno)
+  {
+      pthread_mutex_unlock(&rsm_mutex);
+      return rsm_protocol::ERR;
+  }
+  last_myvs=vs;
+  execute(proc,req);
+
+  pthread_mutex_unlock(&rsm_mutex);
   return ret;
 }
 

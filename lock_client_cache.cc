@@ -44,6 +44,9 @@ lock_client_cache::lock_client_cache(std::string xdst,
   pthread_mutex_init(&mutexRevokeList, NULL);
   pthread_mutex_init(&mutexRevokeListByOwner, NULL);
 
+  // Creation of rsm client
+  rcl = new rsm_client(xdst);
+
   // Creating new rpc server on port rlock_port
   rpcs *rlsrpc = new rpcs(rlock_port);
 
@@ -64,8 +67,8 @@ lock_client_cache::~lock_client_cache()
     for (std::map<lock_protocol::lockid_t,client_lock_t>::iterator it=localLocks.begin();it!=localLocks.end();it++)
         if ((*it).second.status()==client_lock_t::FREE)
         {
-            lu->dorelease((*it).first);
-            cl->call(lock_protocol::release, cl->id(), (*it).first, r);
+//            lu->dorelease((*it).first);
+            rcl->call(lock_protocol::release, cl->id(), (*it).first, r);
         }
 }
 
@@ -102,8 +105,8 @@ lock_client_cache::releaser()
             // If it is FREE, we release it on server
             if (acqRes==client_lock_t::FREE)
             {
-                lu->dorelease(lid);
-                lock_protocol::status rs=cl->call(lock_protocol::release, cl->id(), lid, r);
+//                lu->dorelease(lid);
+                lock_protocol::status rs=rcl->call(lock_protocol::release, cl->id(), lid, r);
 
                 // If release on server succeds, we change status of lock to NONE
                 if (rs==lock_protocol::OK)
@@ -144,7 +147,7 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
         pthread_mutex_unlock(&mutexRetryMap);
 
         // Request to server
-        lock_protocol::status as=cl->call(lock_protocol::acquire, cl->id(), lid, id, r);
+        lock_protocol::status as=rcl->call(lock_protocol::acquire, cl->id(), lid, id, r);
 
         // If answer is RETRY, we retry to request it after we receive retry rpc, or immediately, if we received it
         while (as==lock_protocol::RETRY)
@@ -153,7 +156,7 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
             while (!retryMap[lid])
                 pthread_cond_wait(&okToRetry, &mutexRetryMap);
             retryMap[lid]=false;
-            as=cl->call(lock_protocol::acquire, cl->id(), lid, id, r);
+            as=rcl->call(lock_protocol::acquire, cl->id(), lid, id, r);
             pthread_mutex_unlock(&mutexRetryMap);
         }
 
@@ -191,11 +194,12 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
     // We try to revoke it remotely
     if(toRevoke)
     {
+        printf("lock_client_cache::release(%llu):: torevoke\n", lid);
         int r;
 
-        lu->dorelease(lid);
+//        lu->dorelease(lid);
         // Call release to server
-        rs=cl->call(lock_protocol::release, cl->id(), lid, r);
+        rs=rcl->call(lock_protocol::release, cl->id(), lid, r);
 
         // If server released it properly, we change it local status to NONE
         if (rs==lock_protocol::OK)

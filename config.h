@@ -43,6 +43,7 @@ class config : public paxos_change {
   std::string dump() { return acc->dump(); };
   void restore(std::string s);
   bool add(std::string);
+  bool remove(std::string);
   bool ismember(std::string m);
   std::vector<std::string> get_curview();
   std::vector<std::string> get_prevview();

@@ -18,9 +18,8 @@ std::map<std::string, rpcc*> rpccCache;
 std::map<lock_protocol::lockid_t, bool> revokeRequested;
 
 // Revoke and retry request queues
-std::queue<std::pair<std::string, lock_protocol::lockid_t> > revokeRequests;
-std::queue<std::pair<std::string, lock_protocol::lockid_t> > retryRequests;
-
+std::list<std::pair<std::string, lock_protocol::lockid_t> > revokeRequests;
+std::list<std::pair<std::string, lock_protocol::lockid_t> > retryRequests;
 // Mutexes to protect revoke and retry request queues
 pthread_mutex_t revokeMutex;
 pthread_mutex_t retryMutex;
@@ -61,7 +60,7 @@ lock_protocol::status cache_lock_t::acquire(std::string addr)
         if (!revokeRequested[id])
         {
             revokeRequested[id] = true;
-            revokeRequests.push(std::make_pair(lockHolder, id));
+            revokeRequests.push_back(std::make_pair(lockHolder, id));
         }
         pthread_mutex_unlock(&revokeMutex);
         pthread_cond_signal(&needToRevoke);
@@ -83,7 +82,7 @@ lock_protocol::status cache_lock_t::acquire(std::string addr)
         {
             pthread_mutex_lock(&revokeMutex);
             revokeRequested[id] = true;
-            revokeRequests.push(std::make_pair(lockHolder, id));
+            revokeRequests.push_back(std::make_pair(lockHolder, id));
             pthread_mutex_unlock(&revokeMutex);
             pthread_cond_signal(&needToRevoke);
         }
@@ -111,7 +110,7 @@ void cache_lock_t::release()
     {
         std::string client = interestedClients.front();
         interestedClients.pop_front();
-        retryRequests.push(std::make_pair(client, id)); // add repeat request to the queue
+        retryRequests.push_back(std::make_pair(client, id)); // add repeat request to the queue
         pthread_mutex_unlock(&retryMutex);
 
         // wake up the retryer thread
@@ -177,48 +176,56 @@ lock_server_cache::revoker()
 
     while (true)
     {
-        pthread_mutex_lock(&revokeMutex);
-
-        // wait for new revoke requests
-        while (revokeRequests.empty())
-            pthread_cond_wait(&needToRevoke, &revokeMutex);
-
-        // get request details
-        std::pair<std::string, lock_protocol::lockid_t> req =
-            revokeRequests.front();
-
-        // remove processed request
-        revokeRequests.pop();
-
-        pthread_mutex_unlock(&revokeMutex);
-        
-        // get or create connection to client
-        rpcc* cl;
-        if (rpccCache.find(req.first) == rpccCache.end())
+        printf("revoker: torevoke");
+        if(rsm->amiprimary())
         {
-            sockaddr_in dstsock;
-            make_sockaddr(req.first.c_str(), &dstsock);
-            cl = new rpcc(dstsock);
+            pthread_mutex_lock(&revokeMutex);
 
-            if (cl->bind() < 0) {
-                printf("lock_server_cache::revoker(): bind failed\n");
-                return;
+            // wait for new revoke requests
+            while (revokeRequests.empty())
+                pthread_cond_wait(&needToRevoke, &revokeMutex);
+
+            // get request details
+            std::pair<std::string, lock_protocol::lockid_t> req =
+                revokeRequests.front();
+
+            // remove processed request
+            revokeRequests.pop_front();
+
+            pthread_mutex_unlock(&revokeMutex);
+
+            // get or create connection to client
+            rpcc* cl;
+            if (rpccCache.find(req.first) == rpccCache.end())
+            {
+                sockaddr_in dstsock;
+                make_sockaddr(req.first.c_str(), &dstsock);
+                cl = new rpcc(dstsock);
+
+                if (cl->bind() < 0) {
+                    printf("lock_server_cache::revoker(): bind failed\n");
+                    return;
+                }
+
+                rpccCache.insert(std::make_pair(req.first, cl));
+            }
+            else
+            {
+                cl = rpccCache[req.first];
             }
 
-            rpccCache.insert(std::make_pair(req.first, cl));
+            // send revoke request
+            printf("lock_server_cache::send_revoke(%s, %llu)\n", req.first.c_str(), req.second);
+            if (cl->call(rlock_protocol::revoke, req.second, r) != rlock_protocol::OK)
+            {
+                pthread_mutex_lock(&revokeMutex);
+                revokeRequests.push_back(req);
+                pthread_mutex_unlock(&revokeMutex);
+            }
         }
         else
         {
-            cl = rpccCache[req.first];
-        }
-
-        // send revoke request
-        printf("lock_server_cache::send_revoke(%s, %llu)\n", req.first.c_str(), req.second);
-        if (cl->call(rlock_protocol::revoke, req.second, r) != rlock_protocol::OK)
-        {
-            pthread_mutex_lock(&revokeMutex);
-            revokeRequests.push(req);
-            pthread_mutex_unlock(&revokeMutex);
+            sleep(5);
         }
     }
 }
@@ -236,48 +243,56 @@ lock_server_cache::retryer()
 
     while (true)
     {
-        pthread_mutex_lock(&retryMutex);
+        printf("retryer: toretry");
 
-        // wait for new revoke requests
-        while (retryRequests.empty())
-            pthread_cond_wait(&needToRetry, &retryMutex);
-
-        // get request details
-        std::pair<std::string, lock_protocol::lockid_t> req =
-            retryRequests.front();
-
-        // remove processed request
-        retryRequests.pop();
-
-        pthread_mutex_unlock(&retryMutex);
-
-        // get or create connection to client
-        rpcc* cl;
-        if (rpccCache.find(req.first) == rpccCache.end())
+        if (rsm->amiprimary())
         {
-            sockaddr_in dstsock;
-            make_sockaddr(req.first.c_str(), &dstsock);
-            cl = new rpcc(dstsock);
+            pthread_mutex_lock(&retryMutex);
+            // wait for new revoke requests
+            while (retryRequests.empty())
+                pthread_cond_wait(&needToRetry, &retryMutex);
 
-            if (cl->bind() < 0) {
-                printf("lock_server_cache::revoker(): bind failed\n");
-                return;
+            // get request details
+            std::pair<std::string, lock_protocol::lockid_t> req =
+                retryRequests.front();
+
+            // remove processed request
+            retryRequests.pop_front();
+
+            pthread_mutex_unlock(&retryMutex);
+
+            // get or create connection to client
+            rpcc* cl;
+            if (rpccCache.find(req.first) == rpccCache.end())
+            {
+                sockaddr_in dstsock;
+                make_sockaddr(req.first.c_str(), &dstsock);
+                cl = new rpcc(dstsock);
+
+                if (cl->bind() < 0) {
+                    printf("lock_server_cache::revoker(): bind failed\n");
+                    return;
+                }
+
+                rpccCache.insert(std::make_pair(req.first, cl));
+            }
+            else
+            {
+                cl = rpccCache[req.first];
             }
 
-            rpccCache.insert(std::make_pair(req.first, cl));
+            // send revoke request
+            printf("lock_server_cache::send_retry(%s, %llu)\n", req.first.c_str(), req.second);
+            if (cl->call(rlock_protocol::retry, req.second, r) != rlock_protocol::OK)
+            {
+                pthread_mutex_lock(&retryMutex);
+                retryRequests.push_back(req);
+                pthread_mutex_unlock(&retryMutex);
+            }
         }
         else
         {
-            cl = rpccCache[req.first];
-        }
-
-        // send revoke request
-        printf("lock_server_cache::send_retry(%s, %llu)\n", req.first.c_str(), req.second);
-        if (cl->call(rlock_protocol::retry, req.second, r) != rlock_protocol::OK)
-        {
-            pthread_mutex_lock(&retryMutex);
-            retryRequests.push(req);
-            pthread_mutex_unlock(&retryMutex);
+            sleep(5);
         }
     }
 }
@@ -301,6 +316,26 @@ lock_protocol::status lock_server_cache::acquire(int clt, lock_protocol::lockid_
 {
     printf("lock_server_cache::acquire(%d, %s, %llu)\n", clt, rpc_addr.c_str(), lid);
 
+    if (! rsm->amiprimary_wo())
+    {
+        printf("Not primary acquire\n");
+        // Delete appropriate request from retry queue
+        pthread_mutex_lock(&retryMutex);
+        if(!retryRequests.empty())
+        {
+            for(std::list<std::pair<std::string, lock_protocol::lockid_t> >::iterator it=retryRequests.begin();it!=retryRequests.end();it++)
+            {
+                std::pair<std::string, lock_protocol::lockid_t> pair=*it;
+                if(pair.first.compare(rpc_addr)==0 && pair.second==lid)
+                {
+                    retryRequests.erase(it);
+                    break;
+                }
+            }
+        }
+        pthread_mutex_unlock(&retryMutex);
+    }
+
     // insert new lock record on first access (for unknown-before lock id)
     pthread_mutex_lock(&mutex);
     if (locks.find(lid) == locks.end())
@@ -316,6 +351,26 @@ lock_protocol::status lock_server_cache::release(int clt, lock_protocol::lockid_
 {
     printf("lock_server_cache::release(%d, %llu)\n", clt, lid);
 
+    if (! rsm->amiprimary_wo())
+    {
+        printf("Not primary release\n");
+        // Delete appropriate request from retry queue
+        pthread_mutex_lock(&revokeMutex);
+        if(!revokeRequests.empty())
+        {
+            for(std::list<std::pair<std::string, lock_protocol::lockid_t> >::iterator it=revokeRequests.begin();it!=revokeRequests.end();it++)
+            {
+                std::pair<std::string, lock_protocol::lockid_t> pair=*it;
+                if(pair.second==lid)
+                {
+                    revokeRequests.erase(it);
+                    break;
+                }
+            }
+        }
+        pthread_mutex_unlock(&revokeMutex);
+    }
+
     // insert new lock record on first access (for unknown-before lock id)
     pthread_mutex_lock(&mutex);
     if (locks.find(lid) == locks.end())
@@ -325,4 +380,73 @@ lock_protocol::status lock_server_cache::release(int clt, lock_protocol::lockid_
     locks[lid].release();
 
     return lock_protocol::OK;
+}
+
+
+std::string
+
+lock_server_cache::marshal_state() {
+//
+//
+//
+//  // lock any needed mutexes
+//
+//  marshall rep;
+//
+//  rep << locks.size();
+//
+//  std::map< std::string, std::vector >::iterator iter_lock;
+//
+//  for (iter_lock = locks.begin(); iter_lock != locks.end(); iter_lock++) {
+//
+//    std::string name = iter_lock->first;
+//
+//    std::vector vec = locks[name];
+//
+//    rep << name;
+//
+//    rep << vec;
+//
+//  }
+//
+//  // unlock any mutexes
+//
+//  return rep.str();
+//
+
+    return "";
+}
+
+
+
+void
+
+lock_server_cache::unmarshal_state(std::string state) {
+
+
+//
+//  // lock any needed mutexes
+//
+//  unmarshall rep(state);
+//
+//  unsigned int locks_size;
+//
+//  rep >> locks_size;
+//
+//  for (unsigned int i = 0; i < locks_size; i++) {
+//
+//    std::string name;
+//
+//    rep >> name;
+//
+//    std::vector vec;
+//
+//    rep >> vec;
+//
+//    locks[name] = vec;
+//
+//  }
+//
+//  // unlock any mutexes
+
 }
