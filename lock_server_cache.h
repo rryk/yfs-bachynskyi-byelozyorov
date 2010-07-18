@@ -19,6 +19,8 @@
  *  successfully revoked.
  */
 class cache_lock_t {
+    friend marshall & operator<<(marshall &m, struct cache_lock_t &s);
+    friend unmarshall & operator>>(unmarshall &u, struct cache_lock_t &s);
 public:
 	// This constructor is require to allow use of cache_lock_t as map element.
 	// Since every lock must know it's own id, then this constructor should ever 
@@ -44,7 +46,7 @@ public:
     
     /// Returns the current status of the lock.
     bool isLocked();
-	
+
 private:
 	lock_protocol::lockid_t id; // current lock id
 	std::string lockHolder; // address of the current lock holder (or an empty string if noone is holding the lock)

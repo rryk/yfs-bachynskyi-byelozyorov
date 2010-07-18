@@ -157,11 +157,13 @@ lock_server_cache::lock_server_cache(class rsm *_rsm)
     // initialize lock map access mutex
     pthread_mutex_init(&mutex, NULL);
 
+    rsm->set_state_transfer(this);
     pthread_t th;
     int r = pthread_create(&th, NULL, &revokethread, (void *) this);
     assert (r == 0);
     r = pthread_create(&th, NULL, &retrythread, (void *) this);
     assert (r == 0);
+
 }
 
 void
@@ -382,71 +384,110 @@ lock_protocol::status lock_server_cache::release(int clt, lock_protocol::lockid_
     return lock_protocol::OK;
 }
 
+unmarshall &
+operator>>(unmarshall &u, struct cache_lock_t &s)
+{
+    pthread_mutex_lock(&s.mutex);
+    u >> s.id;
+    u >> s.lockHolder;
+    unsigned int listSize;
+    u >> listSize;
+    for(int j = 0; j < listSize; j++)
+    {
+        std::string i;
+        u >> i;
+        s.interestedClients.push_back(i);
+    }
+    pthread_mutex_unlock(&s.mutex);
+    return u;
+}
 
-std::string
+marshall &
+operator<<(marshall &m, struct cache_lock_t &s)
+{
+    pthread_mutex_lock(&s.mutex);
+    m << s.id;
+    m << s.lockHolder;
+    m << s.interestedClients.size();
+    for(std::list<std::string>::iterator it=s.interestedClients.begin(); it!=s.interestedClients.end(); it++)
+        m << (*it);
+    pthread_mutex_unlock(&s.mutex);
+    return m;
+}
 
-lock_server_cache::marshal_state() {
-//
-//
-//
-//  // lock any needed mutexes
-//
-//  marshall rep;
-//
-//  rep << locks.size();
-//
-//  std::map< std::string, std::vector >::iterator iter_lock;
-//
-//  for (iter_lock = locks.begin(); iter_lock != locks.end(); iter_lock++) {
-//
-//    std::string name = iter_lock->first;
-//
-//    std::vector vec = locks[name];
-//
-//    rep << name;
-//
-//    rep << vec;
-//
-//  }
-//
-//  // unlock any mutexes
-//
-//  return rep.str();
-//
 
-    return "";
+std::string lock_server_cache::marshal_state() {
+    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&revokeMutex);
+    pthread_mutex_lock(&retryMutex);
+        marshall rep;
+
+        rep << locks.size();
+        std::map<lock_protocol::lockid_t, cache_lock_t>::iterator iter_lock;
+        for (iter_lock = locks.begin(); iter_lock != locks.end(); iter_lock++) {
+            lock_protocol::lockid_t id=iter_lock->first;
+            rep << id;
+            rep << locks[id];
+        }
+
+        rep<<revokeRequests.size();
+        for(std::list<std::pair<std::string, lock_protocol::lockid_t> >::iterator it=revokeRequests.begin(); it!=revokeRequests.end(); it++)
+        {
+            rep << it->first;
+            rep << it->second;
+        }
+        rep<<retryRequests.size();
+
+        for(std::list<std::pair<std::string, lock_protocol::lockid_t> >::iterator it=retryRequests.begin(); it!=retryRequests.end(); it++)
+        {
+            rep << it->first;
+            rep << it->second;
+        }
+    pthread_mutex_lock(&mutex);
+    pthread_mutex_unlock(&revokeMutex);
+    pthread_mutex_unlock(&retryMutex);
+
+    return rep.str();
 }
 
 
 
-void
+void lock_server_cache::unmarshal_state(std::string state) {
+    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&revokeMutex);
+    pthread_mutex_lock(&retryMutex);
+        unmarshall rep(state);
+        unsigned int size;
+        rep >> size;
+        for (unsigned int i = 0; i < size; i++)
+        {
+            lock_protocol::lockid_t id;
+            rep >> id;
+            cache_lock_t lock(id);
+            rep >> lock;
+            locks[id] = lock;
+        }
 
-lock_server_cache::unmarshal_state(std::string state) {
+        rep>>size;
+        for (unsigned int i = 0; i < size; i++)
+        {
+            std::string first;
+            lock_protocol::lockid_t second;
+            rep >> first;
+            rep >> second;
+            revokeRequests.push_back(std::make_pair(first,second));
+        }
 
-
-//
-//  // lock any needed mutexes
-//
-//  unmarshall rep(state);
-//
-//  unsigned int locks_size;
-//
-//  rep >> locks_size;
-//
-//  for (unsigned int i = 0; i < locks_size; i++) {
-//
-//    std::string name;
-//
-//    rep >> name;
-//
-//    std::vector vec;
-//
-//    rep >> vec;
-//
-//    locks[name] = vec;
-//
-//  }
-//
-//  // unlock any mutexes
-
+        rep>>size;
+        for (unsigned int i = 0; i < size; i++)
+        {
+            std::string first;
+            lock_protocol::lockid_t second;
+            rep >> first;
+            rep >> second;
+            retryRequests.push_back(std::make_pair(first,second));
+        }
+    pthread_mutex_lock(&mutex);
+    pthread_mutex_unlock(&revokeMutex);
+    pthread_mutex_unlock(&retryMutex);
 }

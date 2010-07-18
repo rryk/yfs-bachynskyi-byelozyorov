@@ -151,7 +151,7 @@ rsm::recovery()
 
     while (1) {
         while (!cfg->ismember(cfg->myaddr())) {
-//            inviewchange=true;
+            inviewchange=true;
             printf("rsm::recovery: we are not in the list of members, starting join\n");
             if (join(primary)) {
                 printf("rsm::recovery: join succeeded\n");
@@ -162,7 +162,7 @@ rsm::recovery()
                 assert(pthread_mutex_lock(&rsm_mutex)==0);
             }
         }
-//        inviewchange=false;
+        inviewchange=false;
 
         if (r) inviewchange = false;
         printf("rsm::recovery: go to sleep %d %d\n", insync, inviewchange);
