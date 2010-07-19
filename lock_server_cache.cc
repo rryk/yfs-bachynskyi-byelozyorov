@@ -178,7 +178,7 @@ lock_server_cache::revoker()
 
     while (true)
     {
-        printf("revoker: torevoke");
+        printf("revoker: torevoke\n");
         if(rsm->amiprimary())
         {
             pthread_mutex_lock(&revokeMutex);
@@ -245,7 +245,7 @@ lock_server_cache::retryer()
 
     while (true)
     {
-        printf("retryer: toretry");
+        printf("retryer: toretry\n");
 
         if (rsm->amiprimary())
         {
@@ -421,7 +421,7 @@ operator>>(unmarshall &u, struct cache_lock_t &s)
     u >> s.lockHolder;
     unsigned int listSize;
     u >> listSize;
-    for(int j = 0; j < listSize; j++)
+    for(unsigned j = 0; j < listSize; j++)
     {
         std::string i;
         u >> i;
@@ -437,7 +437,7 @@ operator<<(marshall &m, struct cache_lock_t &s)
     pthread_mutex_lock(&s.mutex);
     m << s.id;
     m << s.lockHolder;
-    m << s.interestedClients.size();
+    m << (long long unsigned int) s.interestedClients.size();
     for(std::list<std::string>::iterator it=s.interestedClients.begin(); it!=s.interestedClients.end(); it++)
         m << (*it);
     pthread_mutex_unlock(&s.mutex);
@@ -451,7 +451,7 @@ std::string lock_server_cache::marshal_state() {
     pthread_mutex_lock(&retryMutex);
         marshall rep;
 
-        rep << locks.size();
+        rep << (long long unsigned int) locks.size();
         std::map<lock_protocol::lockid_t, cache_lock_t>::iterator iter_lock;
         for (iter_lock = locks.begin(); iter_lock != locks.end(); iter_lock++) {
             lock_protocol::lockid_t id=iter_lock->first;
@@ -459,13 +459,13 @@ std::string lock_server_cache::marshal_state() {
             rep << locks[id];
         }
 
-        rep<<revokeRequests.size();
+        rep << (long long unsigned int) revokeRequests.size();
         for(std::list<std::pair<std::string, lock_protocol::lockid_t> >::iterator it=revokeRequests.begin(); it!=revokeRequests.end(); it++)
         {
             rep << it->first;
             rep << it->second;
         }
-        rep<<retryRequests.size();
+        rep << (long long unsigned int) retryRequests.size();
 
         for(std::list<std::pair<std::string, lock_protocol::lockid_t> >::iterator it=retryRequests.begin(); it!=retryRequests.end(); it++)
         {

@@ -266,7 +266,7 @@ extent_protocol::status extent_client::fetch(extent_protocol::extentid_t id)
 
 void extent_client::reallocateString(std::string &str, unsigned newSize)
 {
-    printf("extent_client::reallocateString, oldSize=%u, newSize=%u", str.size(), newSize);
+    printf("extent_client::reallocateString, oldSize=%ld, newSize=%u", str.size(), newSize);
     if (str.size() > newSize)
         str = std::string(str, 0, newSize);
     else if (str.size() < newSize)
@@ -275,7 +275,7 @@ void extent_client::reallocateString(std::string &str, unsigned newSize)
         newStr.replace(0, str.size(), str);
         str = newStr;
     }
-    printf(", updatedSize=%u\n", str.size());
+    printf(", updatedSize=%ld\n", str.size());
 }
 
 extent_protocol::status extent_client::flush(extent_protocol::extentid_t id)

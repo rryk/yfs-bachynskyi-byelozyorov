@@ -279,7 +279,7 @@ rsm::commit_change()
 std::string
 rsm::execute(int procno, std::string req)
 {
-  printf("execute\n");
+  printf("rsm::execute\n");
   handler *h = procs[procno];
   assert(h);
   unmarshall args(req);
@@ -356,7 +356,7 @@ rsm::client_invoke(int procno, std::string req, std::string &responce)
       }
       breakpoint1();
   }
-  printf("Primary executed!!!");
+  printf("Primary executed!!!\n");
   responce=execute(procno,req);
   pthread_mutex_unlock(&invoke_mutex);
 
