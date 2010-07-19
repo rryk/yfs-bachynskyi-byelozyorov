@@ -58,6 +58,8 @@ private:
 class lock_server_cache : public rsm_state_transfer{
 private:
     class rsm *rsm;
+
+    std::map<int, std::map<long long unsigned int, lock_protocol::status> > rpcDone;
 public:
 	/// This is constructor for the lock server. It will start revoker
 	/// and retryer threads and set up internal variables to their initial
@@ -91,7 +93,7 @@ public:
 	 *  @return Execution status of the RPC function. Indicates success or
 	 *          failure code.
 	 */
-	lock_protocol::status acquire(int clt, lock_protocol::lockid_t lid, std::string rpc_addr, int & r);
+        lock_protocol::status acquire(int clt, long long unsigned int reqID, lock_protocol::lockid_t lid, std::string rpc_addr, int & r);
 
 	/** Release certain lock (RPC command handler)
 	 *
@@ -100,7 +102,7 @@ public:
 	 *  @return Execution status of the RPC function. Indicates success or
 	 *          failure code.
 	 */
-	lock_protocol::status release(int clt, lock_protocol::lockid_t lid, int &);
+        lock_protocol::status release(int clt, long long unsigned int reqID, lock_protocol::lockid_t lid, int &);
 
         virtual std::string marshal_state();
         virtual void unmarshal_state(std::string);

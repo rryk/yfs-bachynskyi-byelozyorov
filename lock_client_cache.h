@@ -115,6 +115,9 @@ class lock_client_cache : public lock_client {
   /// id for creation of sockaddr obj, "ip:port"
   std::string id;
 
+  long long unsigned int lastRequest;
+  pthread_mutex_t mutex;
+
   /// Map for local saving locks
   std::map<lock_protocol::lockid_t, client_lock_t> localLocks;
 

@@ -314,10 +314,9 @@ lock_protocol::status lock_server_cache::stat(int clt, lock_protocol::lockid_t l
     return lock_protocol::OK;
 }
 
-lock_protocol::status lock_server_cache::acquire(int clt, lock_protocol::lockid_t lid, std::string rpc_addr, lock_protocol::status & r)
+lock_protocol::status lock_server_cache::acquire(int clt, long long unsigned int reqID, lock_protocol::lockid_t lid, std::string rpc_addr, lock_protocol::status & r)
 {
     printf("lock_server_cache::acquire(%d, %s, %llu)\n", clt, rpc_addr.c_str(), lid);
-
     if (! rsm->amiprimary_wo())
     {
         printf("Not primary acquire\n");
@@ -338,10 +337,23 @@ lock_protocol::status lock_server_cache::acquire(int clt, lock_protocol::lockid_
         pthread_mutex_unlock(&retryMutex);
     }
 
-    // insert new lock record on first access (for unknown-before lock id)
     pthread_mutex_lock(&mutex);
+    if(rpcDone.find(clt)!=rpcDone.end())
+    {
+        if(rpcDone[clt].find(reqID)!=rpcDone[clt].end())
+        {
+            lock_protocol::status res=rpcDone[clt][reqID];
+            pthread_mutex_unlock(&mutex);
+            return res;
+        }
+    }
+
+
+    // insert new lock record on first access (for unknown-before lock id)
     if (locks.find(lid) == locks.end())
         locks.insert(std::make_pair(lid, cache_lock_t(lid)));
+
+    rpcDone[clt][reqID]=r;
     pthread_mutex_unlock(&mutex);
 
     r = locks[lid].acquire(rpc_addr);
@@ -349,9 +361,10 @@ lock_protocol::status lock_server_cache::acquire(int clt, lock_protocol::lockid_
     return r;
 }
 
-lock_protocol::status lock_server_cache::release(int clt, lock_protocol::lockid_t lid, int &)
+lock_protocol::status lock_server_cache::release(int clt, long long unsigned int reqID, lock_protocol::lockid_t lid, int &)
 {
     printf("lock_server_cache::release(%d, %llu)\n", clt, lid);
+
 
     if (! rsm->amiprimary_wo())
     {
@@ -373,10 +386,26 @@ lock_protocol::status lock_server_cache::release(int clt, lock_protocol::lockid_
         pthread_mutex_unlock(&revokeMutex);
     }
 
-    // insert new lock record on first access (for unknown-before lock id)
     pthread_mutex_lock(&mutex);
+    if(rpcDone.find(clt)!=rpcDone.end())
+    {
+        if(rpcDone[clt].find(reqID)!=rpcDone[clt].end())
+        {
+            lock_protocol::status res=rpcDone[clt][reqID];
+            pthread_mutex_unlock(&mutex);
+            return res;
+        }
+    }
+
+    // insert new lock record on first access (for unknown-before lock id)
     if (locks.find(lid) == locks.end())
+    {
+        rpcDone[clt][reqID]=lock_protocol::NOENT;
+        pthread_mutex_unlock(&mutex);
         return lock_protocol::NOENT;
+    }
+
+    rpcDone[clt][reqID]=lock_protocol::OK;
     pthread_mutex_unlock(&mutex);
 
     locks[lid].release();
@@ -443,6 +472,15 @@ std::string lock_server_cache::marshal_state() {
             rep << it->first;
             rep << it->second;
         }
+//
+//        rep << rpcDone.size();
+//        std::map<int, std::map<long long unsigned int, lock_protocol::status> > oldRPCit;
+//        for (iter_lock = locks.begin(); iter_lock != locks.end(); iter_lock++) {
+//            lock_protocol::lockid_t id=iter_lock->first;
+//            rep << id;
+//            rep << locks[id];
+//        }
+
     pthread_mutex_lock(&mutex);
     pthread_mutex_unlock(&revokeMutex);
     pthread_mutex_unlock(&retryMutex);

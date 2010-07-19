@@ -20,7 +20,7 @@ int lock_client_cache::last_port = 0;
 
 lock_client_cache::lock_client_cache(std::string xdst, 
 				     class lock_release_user *_lu)
-  : lock_client(xdst), lu(_lu)
+  : lock_client(xdst), lu(_lu), lastRequest(0)
 {
   // Seek random generator of first client to 1, all other to random value
   srand(time(NULL)^last_port);
@@ -40,6 +40,7 @@ lock_client_cache::lock_client_cache(std::string xdst,
   // initialize condition vars and mutexes
   pthread_cond_init(&okToRetry, NULL);
   pthread_cond_init(&okToRevoke, NULL);
+  pthread_mutex_init(&mutex, NULL);
   pthread_mutex_init(&mutexRetryMap, NULL);
   pthread_mutex_init(&mutexRevokeList, NULL);
   pthread_mutex_init(&mutexRevokeListByOwner, NULL);
@@ -63,13 +64,15 @@ lock_client_cache::lock_client_cache(std::string xdst,
 
 lock_client_cache::~lock_client_cache()
 {
+    pthread_mutex_lock(&mutex);
     int r;
     for (std::map<lock_protocol::lockid_t,client_lock_t>::iterator it=localLocks.begin();it!=localLocks.end();it++)
         if ((*it).second.status()==client_lock_t::FREE)
         {
 //            lu->dorelease((*it).first);
-            rcl->call(lock_protocol::release, cl->id(), (*it).first, r);
+            rcl->call(lock_protocol::release, cl->id(), ++lastRequest, (*it).first, r);
         }
+    pthread_mutex_unlock(&mutex);
 }
 
 void
@@ -105,8 +108,11 @@ lock_client_cache::releaser()
             // If it is FREE, we release it on server
             if (acqRes==client_lock_t::FREE)
             {
+                pthread_mutex_lock(&mutex);
+                long long unsigned int reqID=++lastRequest;
+                pthread_mutex_unlock(&mutex);
 //                lu->dorelease(lid);
-                lock_protocol::status rs=rcl->call(lock_protocol::release, cl->id(), lid, r);
+                lock_protocol::status rs=rcl->call(lock_protocol::release, cl->id(),reqID, lid, r);
 
                 // If release on server succeds, we change status of lock to NONE
                 if (rs==lock_protocol::OK)
@@ -147,7 +153,10 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
         pthread_mutex_unlock(&mutexRetryMap);
 
         // Request to server
-        lock_protocol::status as=rcl->call(lock_protocol::acquire, cl->id(), lid, id, r);
+        pthread_mutex_lock(&mutex);
+        long long unsigned int reqID=++lastRequest;
+        pthread_mutex_unlock(&mutex);
+        lock_protocol::status as=rcl->call(lock_protocol::acquire, cl->id(),reqID, lid, id, r);
 
         // If answer is RETRY, we retry to request it after we receive retry rpc, or immediately, if we received it
         while (as==lock_protocol::RETRY)
@@ -156,7 +165,10 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
             while (!retryMap[lid])
                 pthread_cond_wait(&okToRetry, &mutexRetryMap);
             retryMap[lid]=false;
-            as=rcl->call(lock_protocol::acquire, cl->id(), lid, id, r);
+            pthread_mutex_lock(&mutex);
+            long long unsigned int reqID=++lastRequest;
+            pthread_mutex_unlock(&mutex);
+            as=rcl->call(lock_protocol::acquire, cl->id(),reqID, lid, id, r);
             pthread_mutex_unlock(&mutexRetryMap);
         }
 
@@ -199,7 +211,10 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
 
 //        lu->dorelease(lid);
         // Call release to server
-        rs=rcl->call(lock_protocol::release, cl->id(), lid, r);
+        pthread_mutex_lock(&mutex);
+        long long unsigned int reqID=++lastRequest;
+        pthread_mutex_unlock(&mutex);
+        rs=rcl->call(lock_protocol::release, cl->id(),reqID, lid, r);
 
         // If server released it properly, we change it local status to NONE
         if (rs==lock_protocol::OK)
