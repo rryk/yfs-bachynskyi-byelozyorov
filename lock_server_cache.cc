@@ -472,14 +472,23 @@ std::string lock_server_cache::marshal_state() {
             rep << it->first;
             rep << it->second;
         }
-//
-//        rep << rpcDone.size();
-//        std::map<int, std::map<long long unsigned int, lock_protocol::status> > oldRPCit;
-//        for (iter_lock = locks.begin(); iter_lock != locks.end(); iter_lock++) {
-//            lock_protocol::lockid_t id=iter_lock->first;
-//            rep << id;
-//            rep << locks[id];
-//        }
+
+        rep << rpcDone.size();
+        std::map<int, std::map<long long unsigned int, lock_protocol::status> >::iterator oldRPCit;
+        for (oldRPCit = rpcDone.begin(); oldRPCit != rpcDone.end(); oldRPCit++) {
+            int clt=oldRPCit->first;
+            rep << clt;
+            std::map<long long unsigned int, lock_protocol::status> requests=oldRPCit->second;
+
+            rep << requests.size();
+            std::map<long long unsigned int, lock_protocol::status>::iterator it;
+            for (it = requests.begin(); it != requests.end(); it++) {
+                long long unsigned int reqID=it->first;
+                rep << reqID;
+                lock_protocol::status stat=it->second;
+                rep << stat;
+            }
+        }
 
     pthread_mutex_lock(&mutex);
     pthread_mutex_unlock(&revokeMutex);
@@ -525,6 +534,27 @@ void lock_server_cache::unmarshal_state(std::string state) {
             rep >> second;
             retryRequests.push_back(std::make_pair(first,second));
         }
+
+        rep >> size;
+        for (unsigned int i = 0; i < size; i++) {
+            int clt;
+            rep >> clt;
+            std::map<long long unsigned int, lock_protocol::status> requests;
+
+            unsigned int size2;
+            rep >> size2;
+            for (unsigned int j = 0; j < size2; j++) {
+                long long unsigned int reqID;
+                rep >> reqID;
+                lock_protocol::status stat;
+                rep >> stat;
+                requests[reqID]=stat;
+            }
+            rpcDone[clt]=requests;
+        }
+
+
+
     pthread_mutex_lock(&mutex);
     pthread_mutex_unlock(&revokeMutex);
     pthread_mutex_unlock(&retryMutex);
