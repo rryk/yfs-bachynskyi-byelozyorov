@@ -473,14 +473,14 @@ std::string lock_server_cache::marshal_state() {
             rep << it->second;
         }
 
-        rep << rpcDone.size();
+        rep << (long long unsigned int) rpcDone.size();
         std::map<int, std::map<long long unsigned int, lock_protocol::status> >::iterator oldRPCit;
         for (oldRPCit = rpcDone.begin(); oldRPCit != rpcDone.end(); oldRPCit++) {
             int clt=oldRPCit->first;
             rep << clt;
             std::map<long long unsigned int, lock_protocol::status> requests=oldRPCit->second;
 
-            rep << requests.size();
+            rep << (long long unsigned int) requests.size();
             std::map<long long unsigned int, lock_protocol::status>::iterator it;
             for (it = requests.begin(); it != requests.end(); it++) {
                 long long unsigned int reqID=it->first;
