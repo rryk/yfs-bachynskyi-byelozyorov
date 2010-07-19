@@ -354,6 +354,7 @@ rsm::client_invoke(int procno, std::string req, std::string &responce)
           failed=true;
           failedID=slaves[i];
       }
+      breakpoint1();
   }
   printf("Primary executed!!!");
   responce=execute(procno,req);

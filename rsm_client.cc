@@ -31,7 +31,51 @@ rsm_client::rsm_client(std::string dst)
 void
 rsm_client::primary_failure()
 {
-  // For lab 8
+    printf("Primary failure");
+    for(std::vector<std::string>::iterator it=known_mems.begin();it!=known_mems.end();it++)
+    {
+        sockaddr_in dstsock;
+        make_sockaddr((*it).c_str(), &dstsock);
+        rpcc r(dstsock);
+        if (r.bind(rpcc::to(1000)) < 0) {
+            continue;
+        }
+        std::vector<std::string> temp_mems;
+        int ret=r.call(rsm_client_protocol::members, 0, temp_mems,
+            rpcc::to(1000));
+
+        if (ret != rsm_protocol::OK)
+            continue;
+
+        if (temp_mems.size()<1)
+            continue;
+
+        std::string new_primary = temp_mems.back();
+        temp_mems.pop_back();
+
+        if (new_primary != primary.id) {
+          sockaddr_in new_primary_sock;
+          make_sockaddr(new_primary.c_str(), &new_primary_sock);
+          primary_t new_pr;
+          new_pr.id = new_primary;
+          new_pr.cl = new rpcc(new_primary_sock);
+          new_pr.nref=0;
+
+          if (new_pr.cl->bind(rpcc::to(1000)) < 0) {
+              continue;
+          }
+          primary.id=new_pr.id;
+          if (primary.cl) {
+            assert(primary.nref == 0);  // XXX fix: delete cl only when refcnt=0
+            delete primary.cl;
+          }
+          primary.cl=new_pr.cl;
+          primary.nref=0;
+          break;
+        }
+
+    }
+    init_members(true);
 }
 
 rsm_protocol::status
